@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>항공사 커미션 대시보드 | 항공사업팀</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:#222;min-height:100vh}
+
+/* NAV */
+.nav{background:#1B2A4A;color:#fff;padding:0 32px;display:flex;align-items:center;height:56px;position:sticky;top:0;z-index:200}
+.nav .logo{font-size:16px;font-weight:700;letter-spacing:-0.3px}
+.nav .logo span{color:#4D9EFF}
+.nav-links{display:flex;gap:4px;margin-left:32px}
+.nav-links a{color:rgba(255,255,255,0.6);text-decoration:none;font-size:13px;font-weight:500;padding:8px 14px;border-radius:6px;transition:all 0.2s;cursor:pointer}
+.nav-links a:hover{color:#fff;background:rgba(255,255,255,0.08)}
+.nav-links a.active{color:#fff;background:rgba(77,158,255,0.2)}
+.nav-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.nav-right .user{font-size:12px;color:rgba(255,255,255,0.7)}
+.nav-right .avatar{width:30px;height:30px;border-radius:50%;background:#4D9EFF;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#fff}
+.btn-login{background:#4D9EFF;color:#fff;border:none;padding:7px 16px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer}
+.btn-login:hover{background:#3B8DE6}
+.btn-logout{background:none;border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.7);padding:5px 12px;border-radius:6px;font-size:11px;cursor:pointer}
+
+/* LAYOUT */
+.page{display:none;padding:24px 32px;max-width:1400px;margin:0 auto}
+.page.active{display:block}
+
+/* STATS */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.st{background:#fff;border:1px solid #E8EAED;border-radius:10px;padding:16px 20px}
+.st .lb{font-size:11px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:0.3px}
+.st .vl{font-size:26px;font-weight:700;margin-top:2px}
+.st .vl.bl{color:#0066FF}.st .vl.gn{color:#00A86B}.st .vl.or{color:#E67E00}
+
+/* CONTROLS */
+.controls{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
+.search-box{position:relative;flex:1;min-width:180px;max-width:360px}
+.search-box input{width:100%;padding:10px 14px 10px 36px;border:1.5px solid #D0D5DD;border-radius:8px;font-size:13px;font-weight:500;outline:none;background:#fff}
+.search-box input:focus{border-color:#0066FF;box-shadow:0 0 0 3px rgba(0,102,255,0.08)}
+.search-box svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#999}
+.fbtn{padding:8px 16px;border:1.5px solid #D0D5DD;border-radius:8px;background:#fff;font-size:12px;font-weight:500;cursor:pointer;color:#555;transition:all 0.15s}
+.fbtn:hover{background:#F7F8FA;border-color:#BBB}
+.fbtn.act{background:#E8F2FF;border-color:#0066FF;color:#0066FF;font-weight:600}
+
+/* CARD GRID */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.card{background:#fff;border-radius:10px;border:1px solid #E8EAED;overflow:hidden;cursor:pointer;transition:all 0.2s}
+.card:hover{box-shadow:0 4px 16px rgba(0,0,0,0.07);transform:translateY(-2px);border-color:#CCC}
+.card.ov{border-left:3.5px solid #00A86B}
+.card.bsp-only{border-left:3.5px solid #0066FF}
+.card.nc{border-left:3.5px solid #E8EAED}
+.card-top{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px}
+.card-code{font-size:24px;font-weight:800;color:#1B2A4A;letter-spacing:1px}
+.badges{display:flex;gap:4px;flex-wrap:wrap}
+.badge{padding:3px 9px;border-radius:12px;font-size:10px;font-weight:600}
+.badge.bsp{background:#E8F2FF;color:#0052CC}
+.badge.over{background:#E6F9F0;color:#006644}
+.badge.nocom{background:#F3F3F3;color:#AAA}
+.badge.b2g{background:#F3EEFF;color:#6B46C1}
+.card-rates{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:0 16px 10px}
+.rate{text-align:center;padding:7px;background:#F7F8FA;border-radius:7px}
+.rate .rl{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.3px}
+.rate .rv{font-size:16px;font-weight:700;margin-top:1px}
+.rate .rv.hi{color:#00A86B}.rate .rv.ze{color:#D0D5DD}
+.card-tags{display:flex;gap:5px;flex-wrap:wrap;padding:0 16px 10px}
+.tag{font-size:10px;color:#555;background:#F7F8FA;padding:3px 8px;border-radius:4px}
+.tag b{font-weight:600}
+.card-note{padding:8px 16px;background:#FFFBEB;border-top:1px solid #FEF3C7;font-size:11px;color:#92400E;line-height:1.5;max-height:42px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.card-arrow{padding:8px 16px;background:#F7F8FA;border-top:1px solid #E8EAED;font-size:11px;color:#0066FF;font-weight:500;text-align:center}
+.empty{text-align:center;padding:60px;color:#AAA;font-size:14px}
+
+/* DETAIL PAGE */
+.detail-header{display:flex;align-items:center;gap:16px;margin-bottom:24px;flex-wrap:wrap}
+.back-btn{background:none;border:1px solid #D0D5DD;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;color:#555;display:flex;align-items:center;gap:6px}
+.back-btn:hover{background:#F7F8FA}
+.detail-code{font-size:36px;font-weight:800;color:#1B2A4A;letter-spacing:1px}
+.detail-badges{display:flex;gap:6px;align-items:center}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.info-card{background:#fff;border:1px solid #E8EAED;border-radius:10px;padding:20px}
+.info-card h3{font-size:14px;font-weight:700;color:#1B2A4A;margin-bottom:14px}
+.rate-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.rate-box{text-align:center;padding:12px;background:#F7F8FA;border-radius:8px}
+.rate-box .rb-label{font-size:10px;color:#888;font-weight:500;text-transform:uppercase}
+.rate-box .rb-value{font-size:22px;font-weight:700;margin-top:4px}
+.rate-box .rb-value.hi{color:#00A86B}
+.rate-box .rb-value.ze{color:#D0D5DD}
+.note-box{background:#FFFBEB;border:1px solid #FEF3C7;border-radius:8px;padding:14px;font-size:13px;color:#92400E;line-height:1.6;margin-top:12px}
+.history-section,.archive-section{background:#fff;border:1px solid #E8EAED;border-radius:10px;padding:20px;margin-bottom:24px}
+.history-section h3,.archive-section h3{font-size:14px;font-weight:700;color:#1B2A4A;margin-bottom:14px}
+.htbl{width:100%;border-collapse:collapse;font-size:12px}
+.htbl thead th{background:#F1F5F9;padding:10px 12px;text-align:left;font-weight:600;color:#475569;border-bottom:2px solid #E2E8F0}
+.htbl tbody td{padding:10px 12px;border-bottom:1px solid #F1F5F9;vertical-align:top}
+.htbl tbody tr:hover td{background:#F8FAFC}
+.htbl .rt{font-weight:600;color:#1B2A4A}
+.htbl .pr{color:#718096;font-size:11px}
+.htbl .nc{max-width:280px;line-height:1.4;color:#555;font-size:11px}
+.htbl tr.cur{background:#F0FFF4}
+.htbl tr.cur td:first-child{border-left:3px solid #00A86B}
+.b2g-tag{background:#F3EEFF;color:#6B46C1;padding:2px 6px;border-radius:8px;font-size:9px;font-weight:600;margin-right:4px}
+.img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.img-item{border:1px solid #E8EAED;border-radius:8px;overflow:hidden;cursor:pointer;transition:box-shadow 0.2s}
+.img-item:hover{box-shadow:0 2px 12px rgba(0,0,0,0.08)}
+.img-item img{width:100%;height:120px;object-fit:cover;background:#F7F8FA}
+.img-item .img-label{padding:8px 10px;font-size:11px;color:#555;border-top:1px solid #E8EAED}
+.no-images{color:#AAA;font-size:13px;text-align:center;padding:30px}
+
+/* ADMIN */
+.admin-login{text-align:center;padding:80px 20px}
+.admin-login h2{font-size:22px;font-weight:700;color:#1B2A4A;margin-bottom:8px}
+.admin-login p{color:#888;font-size:14px;margin-bottom:24px}
+.admin-login .restrict{font-size:12px;color:#AAA;margin-top:12px}
+.admin-panel{display:none}
+.admin-panel.visible{display:block}
+.admin-toolbar{display:flex;gap:10px;margin-bottom:20px;align-items:center;flex-wrap:wrap}
+.admin-toolbar select{padding:8px 12px;border:1.5px solid #D0D5DD;border-radius:8px;font-size:13px;font-weight:500;min-width:160px;outline:none;font-family:inherit}
+.admin-toolbar select:focus{border-color:#0066FF}
+.edit-section{background:#fff;border:1px solid #E8EAED;border-radius:10px;padding:24px;margin-bottom:16px}
+.edit-section h3{font-size:14px;font-weight:700;color:#1B2A4A;margin-bottom:16px}
+.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.form-group{display:flex;flex-direction:column;gap:4px}
+.form-group label{font-size:11px;font-weight:600;color:#888;text-transform:uppercase}
+.form-group input,.form-group textarea{padding:9px 12px;border:1.5px solid #D0D5DD;border-radius:7px;font-size:13px;font-family:inherit;outline:none}
+.form-group input:focus,.form-group textarea:focus{border-color:#0066FF;box-shadow:0 0 0 3px rgba(0,102,255,0.08)}
+.form-group textarea{resize:vertical;min-height:80px}
+.form-full{grid-column:1/-1}
+.btn-row{display:flex;gap:10px;margin-top:16px;justify-content:flex-end}
+.btn-primary{background:#0066FF;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
+.btn-primary:hover{background:#0052CC}
+.btn-secondary{background:#fff;color:#555;border:1.5px solid #D0D5DD;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer}
+.history-edit-row{display:grid;grid-template-columns:1.5fr 0.5fr 0.5fr 1fr 1fr 2fr 40px;gap:8px;align-items:start;margin-bottom:8px;padding:8px;background:#F8FAFC;border-radius:6px}
+.history-edit-row input,.history-edit-row textarea{padding:7px 10px;border:1px solid #D0D5DD;border-radius:5px;font-size:12px;font-family:inherit}
+.history-edit-row textarea{min-height:50px;resize:vertical}
+.btn-remove{background:none;border:none;color:#E53E3E;cursor:pointer;font-size:18px;padding:4px}
+.btn-add{background:#F7F8FA;border:1.5px dashed #D0D5DD;border-radius:8px;padding:10px;text-align:center;font-size:12px;color:#888;cursor:pointer;margin-top:8px}
+.btn-add:hover{background:#E8F2FF;border-color:#0066FF;color:#0066FF}
+
+/* TOAST & MODAL */
+.toast{position:fixed;bottom:24px;right:24px;background:#1B2A4A;color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:500;z-index:300;opacity:0;transform:translateY(10px);transition:all 0.3s;pointer-events:none}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.success{background:#00A86B}
+.toast.error{background:#E53E3E}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:250;display:none;align-items:center;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal{background:#fff;border-radius:12px;max-width:800px;width:90%;max-height:85vh;overflow:auto;padding:24px}
+.modal img{width:100%;border-radius:8px}
+.modal .modal-close{float:right;background:none;border:none;font-size:24px;cursor:pointer;color:#888}
+
+@media(max-width:768px){.detail-grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.history-edit-row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="logo">MyRealTrip <span>커미션</span></div>
+  <div class="nav-links">
+    <a class="active" onclick="navigate('list')">대시보드</a>
+    <a onclick="navigate('admin')">관리자</a>
+    <a href="index.html">실적 대시보드</a>
+  </div>
+  <div class="nav-right" id="navRight">
+    <button class="btn-login" onclick="googleLogin()">Google 로그인</button>
+  </div>
+</nav>
+
+<!-- LIST -->
+<div class="page active" id="page-list">
+  <div style="margin-bottom:20px">
+    <div style="color:#0066FF;font-size:12px;font-weight:600;margin-bottom:4px">COMMISSION DASHBOARD</div>
+    <h1 style="font-size:26px;font-weight:700;color:#1B2A4A">항공사 커미션 대시보드</h1>
+    <p style="color:#888;font-size:13px;margin-top:4px">항공사 카드를 클릭하면 상세 정보를 확인할 수 있습니다</p>
+  </div>
+  <div class="stats" id="statsBar"></div>
+  <div class="controls">
+    <div class="search-box">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="searchInput" placeholder="항공사 코드 검색 (AA, BR, NH...)">
+    </div>
+    <button class="fbtn act" data-f="all">전체</button>
+    <button class="fbtn" data-f="bsp">BSP컴</button>
+    <button class="fbtn" data-f="over">오버컴</button>
+    <button class="fbtn" data-f="nocom">노커미션</button>
+  </div>
+  <div class="grid" id="cardGrid"></div>
+  <div class="empty" id="emptyState" style="display:none">검색 결과가 없습니다</div>
+</div>
+
+<!-- DETAIL -->
+<div class="page" id="page-detail">
+  <div class="detail-header">
+    <button class="back-btn" onclick="navigate('list')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg> 목록으로</button>
+    <span class="detail-code" id="detailCode"></span>
+    <div class="detail-badges" id="detailBadges"></div>
+  </div>
+  <div id="detailContent"></div>
+</div>
+
+<!-- ADMIN -->
+<div class="page" id="page-admin">
+  <div id="adminLoginPrompt" class="admin-login">
+    <h2>관리자 페이지</h2>
+    <p>커미션 데이터를 수정하려면 사내 계정으로 로그인하세요</p>
+    <button class="btn-primary" onclick="googleLogin()" style="font-size:14px;padding:12px 28px">Google 계정으로 로그인</button>
+    <p class="restrict">@myrealtrip.com 계정만 접근 가능합니다</p>
+  </div>
+  <div id="adminPanel" class="admin-panel">
+    <div style="margin-bottom:20px">
+      <div style="color:#0066FF;font-size:12px;font-weight:600;margin-bottom:4px">ADMIN</div>
+      <h1 style="font-size:22px;font-weight:700;color:#1B2A4A">커미션 관리</h1>
+      <p style="color:#888;font-size:13px;margin-top:4px">항공사별 커미션 정보를 수정하고 아카이빙 자료를 관리하세요</p>
+    </div>
+    <div class="admin-toolbar">
+      <select id="adminAirlineSelect" onchange="loadAdminAirline(this.value)"><option value="">항공사 선택...</option></select>
+      <button class="btn-secondary" onclick="openSheetDirect()">Google Sheets에서 직접 편집</button>
+    </div>
+    <div id="adminEditArea"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="modal-overlay" id="imgModal">
+  <div class="modal"><button class="modal-close" onclick="closeModal()">&times;</button><img id="modalImg" src=""><p id="modalLabel" style="margin-top:12px;font-size:14px;color:#555"></p></div>
+</div>
+
+<script>
+const SHEET_ID='12qqW-NFFxbcvQa_whjoe2LRseCTVwWcLt07AvJzxcVs';
+const SHEET_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=0#gid=0`;
+const CLIENT_ID='YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
+const ALLOWED_DOMAIN='myrealtrip.com';
+
+let airlines=[],historyData=[],currentUser=null,isAdmin=false,currentFilter='all',currentSearch='';
+
+// AUTH
+function googleLogin(){
+  if(CLIENT_ID.startsWith('YOUR_')){currentUser={name:'Dev User',email:'dev@myrealtrip.com'};isAdmin=true;updateAuthUI();if(location.hash==='#admin')showAdminPanel();showToast('Dev 모드로 접근합니다','success');return}
+  google.accounts.id.initialize({client_id:CLIENT_ID,callback:handleCred,auto_select:false,hosted_domain:ALLOWED_DOMAIN});google.accounts.id.prompt();
+}
+function handleCred(r){const p=JSON.parse(atob(r.credential.split('.')[1]));if(!p.email.endsWith('@'+ALLOWED_DOMAIN)){showToast('@myrealtrip.com 계정만 가능','error');return}currentUser={name:p.name,email:p.email};isAdmin=true;updateAuthUI();if(location.hash==='#admin')showAdminPanel();showToast(p.name+'님 환영합니다','success');}
+function logout(){currentUser=null;isAdmin=false;updateAuthUI();if(location.hash==='#admin'){document.getElementById('adminLoginPrompt').style.display='block';document.getElementById('adminPanel').classList.remove('visible');}}
+function updateAuthUI(){const n=document.getElementById('navRight');if(currentUser){const i=currentUser.name.split(' ').map(x=>x[0]).join('').substring(0,2);n.innerHTML=`<span class="user">${currentUser.email}</span><div class="avatar">${i}</div><button class="btn-logout" onclick="logout()">로그아웃</button>`;}else{n.innerHTML='<button class="btn-login" onclick="googleLogin()">Google 로그인</button>';}}
+
+// ROUTING
+function navigate(page,param){location.hash=page==='detail'&&param?`#detail/${param}`:`#${page}`;}
+function handleRoute(){
+  const h=location.hash||'#list';
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-links a').forEach(a=>a.classList.remove('active'));
+  if(h.startsWith('#detail/')){const code=decodeURIComponent(h.split('/')[1]);document.getElementById('page-detail').classList.add('active');renderDetail(code);}
+  else if(h==='#admin'){document.getElementById('page-admin').classList.add('active');document.querySelectorAll('.nav-links a')[1].classList.add('active');if(isAdmin)showAdminPanel();}
+  else{document.getElementById('page-list').classList.add('active');document.querySelectorAll('.nav-links a')[0].classList.add('active');}
+}
+window.addEventListener('hashchange',handleRoute);
+
+// DATA
+function loadEmbeddedData(){
+  airlines=[
+    {code:"AA",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"RP 0컴 KE@A",images:[]},
+    {code:"AC",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"26년 4월 한 달 오버컴 제공으로 설정",images:[]},
+    {code:"AF/KL",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"AI",bsp:"1",over:"0",soto:"1",reissue:"0",chd:"1",inf:"0",notes:"",images:[]},
+    {code:"AM",bsp:"3",over:"0",soto:"0",reissue:"0",chd:"3",inf:"3",notes:"",images:[]},
+    {code:"AT",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"AV",bsp:"1",over:"0",soto:"1",reissue:"0",chd:"0",inf:"0",notes:"",images:[]},
+    {code:"AY",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"RA 제외 설정OK",images:[]},
+    {code:"BA",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"BI",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"",images:[]},
+    {code:"BR",bsp:"5",over:"3",soto:"3",reissue:"0",chd:"BSP5+오버3",inf:"BSP5+오버3",notes:"BSP 5% + 오버컴 3% = 총 8%. SOTO 3% 고정 지급. 오버컴 ~26.6.30. 인천/김포/부산 출발",images:[]},
+    {code:"CA",bsp:"3",over:"0",soto:"0",reissue:"0",chd:"3",inf:"0",notes:"10/1 BSP 기본컴 부활 / OZ 공동운항 불가",images:[]},
+    {code:"ZH",bsp:"3",over:"0",soto:"0",reissue:"0",chd:"3",inf:"0",notes:"25.1.1부터 ZH 479스탁 발권 가능 / ONLY CASH",images:[]},
+    {code:"CI",bsp:"3",over:"7",soto:"0",reissue:"0",chd:"BSP3 오버컴7",inf:"0",notes:"C/D, OAL 결합 가능. 26년 1월 1일부터 10%. ~26.12.31",images:[]},
+    {code:"CX",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"CZ",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"DL",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"DT",bsp:"6",over:"0",soto:"6",reissue:"0",chd:"6",inf:"0",notes:"",images:[]},
+    {code:"EK",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"ET",bsp:"5",over:"3",soto:"5",reissue:"0",chd:"5",inf:"5",notes:"ICN발 오버 8컴 (~26.06.30). 분기별 연장 체크",images:[]},
+    {code:"EY",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"IT 요금 커미션 자동반영",images:[]},
+    {code:"FI",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"",images:[]},
+    {code:"FJ",bsp:"5",over:"0",soto:"5",reissue:"0",chd:"5",inf:"5",notes:"",images:[]},
+    {code:"GA",bsp:"1",over:"0",soto:"1",reissue:"0",chd:"1",inf:"1",notes:"",images:[]},
+    {code:"GS",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"25년 2분기부터 커미션 미제공",images:[]},
+    {code:"G3",bsp:"5",over:"0",soto:"5",reissue:"0",chd:"5",inf:"5",notes:"",images:[]},
+    {code:"HA",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A. 오버컴 탭 확인",images:[]},
+    {code:"HB",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"CLS B,E,N,O,Q,X,Y 0컴 설정",images:[]},
+    {code:"HX",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"OZ 공동운항만 설정",images:[]},
+    {code:"JL",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"",images:[]},
+    {code:"KC",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"",images:[]},
+    {code:"KQ",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"",images:[]},
+    {code:"LA",bsp:"0",over:"3",soto:"0/3",reissue:"0",chd:"0/3",inf:"0",notes:"Long haul만 오버컴. 3개월마다 연장 확인. ~26.6.30",images:[]},
+    {code:"LH",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"LJ",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"LO",bsp:"0",over:"2",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"EU노선 오버컴",images:[]},
+    {code:"LX",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"LY",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"COM@A",images:[]},
+    {code:"MH",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"MU",bsp:"3",over:"0",soto:"0",reissue:"0",chd:"3",inf:"0",notes:"FM/MU만. 중국노선 3컴 유지",images:[]},
+    {code:"NH",bsp:"0",over:"7",soto:"0",reissue:"0",chd:"7",inf:"7",notes:"한일노선만 오버컴 7%. ~26.9.30",images:[]},
+    {code:"NX",bsp:"2",over:"0",soto:"2",reissue:"0",chd:"2",inf:"2",notes:"",images:[]},
+    {code:"NZ",bsp:"3",over:"0",soto:"3",reissue:"0",chd:"3",inf:"3",notes:"",images:[]},
+    {code:"OD",bsp:"5",over:"0",soto:"5",reissue:"0",chd:"5",inf:"0",notes:"26.2.12부 5% 변경",images:[]},
+    {code:"OM",bsp:"5",over:"0",soto:"0",reissue:"0",chd:"5",inf:"5",notes:"C/S 0컴",images:[]},
+    {code:"OS",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"OU",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"PG",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"PR",bsp:"3",over:"0",soto:"3",reissue:"3",chd:"3",inf:"3",notes:"프론트 컴. 재발행도 가능",images:[]},
+    {code:"QF",bsp:"1",over:"0",soto:"0",reissue:"0",chd:"1",inf:"1",notes:"JQ C/S 가능. 한국발만",images:[]},
+    {code:"QR",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"QV",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"SA",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"SC",bsp:"3",over:"0",soto:"0",reissue:"0",chd:"3",inf:"0",notes:"~26.12.31",images:[]},
+    {code:"SQ",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"RA 제외 설정OK",images:[]},
+    {code:"SV",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"TG",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"TK",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"SUPP COMM 빌링 반영 중",images:[]},
+    {code:"TP",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"COM@A",images:[]},
+    {code:"TR",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"TW",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"UA",bsp:"0",over:"4",soto:"0",reissue:"0",chd:"4",inf:"4",notes:"미주/중남미/캐나다 ~26.12.31",images:[]},
+    {code:"UK",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"UL",bsp:"5",over:"0",soto:"5",reissue:"0",chd:"5",inf:"0",notes:"",images:[]},
+    {code:"VJ",bsp:"2.5",over:"0",soto:"2.5",reissue:"0",chd:"2.5",inf:"0",notes:"한국노선만. ~26.5.31",images:[]},
+    {code:"VN",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"RA 제외 설정OK",images:[]},
+    {code:"VT",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"COM@A",images:[]},
+    {code:"YP",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"ZE",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"592(국내)/593(해외출발)",images:[]},
+    {code:"3U",bsp:"1",over:"0",soto:"0",reissue:"0",chd:"1",inf:"0",notes:"한국발국제선 3%. ~26.12.31",images:[]},
+    {code:"5J",bsp:"2",over:"0",soto:"2",reissue:"0",chd:"2",inf:"2",notes:"Private Fare 자동적용. ~26.6.30",images:[]},
+    {code:"7C",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"8M",bsp:"5/3",over:"0",soto:"3",reissue:"0",chd:"5/3",inf:"0",notes:"ICN출발 5%, D/S CLS 3%",images:[]},
+    {code:"VZ",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"26년 1월부터 0%",images:[]},
+    {code:"VS",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"",images:[]},
+    {code:"SL",bsp:"5",over:"0",soto:"5",reissue:"0",chd:"5",inf:"0",notes:"D-30이전 예약시 24시간 내 발권",images:[]},
+    {code:"AS",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"C6",bsp:"2",over:"0",soto:"2",reissue:"0",chd:"2",inf:"0",notes:"",images:[]},
+    {code:"9G",bsp:"0",over:"3",soto:"0",reissue:"0",chd:"3",inf:"3",notes:"ICN-PQC. 오버컴 자동적용",images:[]},
+    {code:"JX",bsp:"5",over:"0",soto:"3",reissue:"0",chd:"5",inf:"5",notes:"",images:[]},
+    {code:"DV",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"인천-쉼켄트. 중복예약 주의",images:[]},
+  ];
+  historyData=[
+    {code:"AA",route:"중남미",bsp:"0%",overEY:"7%",overBZ:"0%",ticketing:"~2025.06.30",departure:"제한 없음",notes:"프라이빗 정규 운임. 한국 출발",b2g:false},
+    {code:"AA",route:"미주",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"~2025.06.30",departure:"제한 없음",notes:"",b2g:false},
+    {code:"BR",route:"한국 출발(인천/김포/부산)",bsp:"5%",overEY:"3%",overBZ:"",ticketing:"2025.02.01~2026.04.30",departure:"제한 없음",notes:"SOTO 3% 고정 지급. ICN/GMP/PUS 출발",b2g:false},
+    {code:"CI",route:"전노선 (26.1~26.12)",bsp:"3%",overEY:"7%",overBZ:"",ticketing:"2025.08.01~2026.12.31",departure:"2026.01.01~2026.12.31",notes:"한국출발 All dest. CI스탁+OAL C/S도 가능",b2g:true},
+    {code:"CI",route:"전노선 (~7.31)",bsp:"3%",overEY:"4%",overBZ:"",ticketing:"2025.02.10~2025.07.31",departure:"",notes:"",b2g:true},
+    {code:"UA",route:"미주,중남미,캐나다",bsp:"0%",overEY:"4%",overBZ:"",ticketing:"2025.07.03~2026.09.30",departure:"운임규정별",notes:"투어코드934EU. BASIC ECO 불가",b2g:true},
+    {code:"NH",route:"한국출발-일본",bsp:"0%",overEY:"7%",overBZ:"",ticketing:"2025.10.01~2026.09.30",departure:"2025.10.01~2027.09.30",notes:"투어코드PP6KRTOT01. P,L,K 제외",b2g:false},
+    {code:"NH",route:"한국출발-일본",bsp:"0%",overEY:"7%",overBZ:"",ticketing:"2025.04.01~2025.09.30",departure:"2025.04.01~2026.09.30",notes:"투어코드PP5KRTOT01",b2g:false},
+    {code:"ET",route:"인천 출발-ET 취항지",bsp:"5%",overEY:"3%",overBZ:"",ticketing:"2025.05.13~2026.06.30",departure:"",notes:"C/Y-Class. 기본컴+3% 추가. 유아 가능",b2g:false},
+    {code:"LA",route:"Long haul (LA Stock)",bsp:"0%",overEY:"EY3%/BZ5%",overBZ:"5%",ticketing:"2026.04.01~2026.06.30",departure:"2026.04.01~2027.06.30",notes:"J:5%/ODKRI89606. Y,W:3%/ODKRI89607",b2g:false},
+    {code:"LO",route:"인천출발/도착(SOTO포함)",bsp:"0%",overEY:"2%",overBZ:"",ticketing:"2026.02.25~2026.03.31",departure:"2026.02.25~2026.03.31",notes:"WRO/WAW 제외. SOTO/CHL 가능",b2g:false},
+    {code:"MH",route:"한국출발",bsp:"0%",overEY:"3%",overBZ:"2%",ticketing:"EY:2025.09.15~2026.12.31",departure:"EY:2025.09.15~",notes:"SOTO 불가. 3% 수동입력",b2g:false},
+    {code:"9G",route:"ICN-PQC",bsp:"0%",overEY:"3%",overBZ:"",ticketing:"2026.03.11~",departure:"",notes:"지정대리점 커미션. CHD/INF 적용",b2g:false},
+    {code:"HA",route:"ICN-Entire US",bsp:"0%",overEY:"7%",overBZ:"",ticketing:"~2025.12.31",departure:"2025.09.13~2026.04.21",notes:"HA편수 1개 포함 필수",b2g:false},
+    {code:"SC",route:"ICN-TAO/YNT",bsp:"3%",overEY:"4%",overBZ:"",ticketing:"2025.10.01~2025.12.31",departure:"2025.10.01~2026.03.28",notes:"ADT/CNN만. 코드쉐어 불가",b2g:false},
+    {code:"AC",route:"한국출발(YVR/YUL포함여정)",bsp:"0%",overEY:"2%",overBZ:"",ticketing:"2026.04.01~2026.04.30",departure:"여정내 2026.06포함",notes:"AC64/AC68 포함 필수",b2g:false},
+    {code:"CA",route:"한국-중국/국내선루팅",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"2025.07.01~2025.09.30",departure:"",notes:"TOURCODE:KR5TH24",b2g:true},
+    {code:"ZH",route:"한국-중국/국내선루팅",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"2025.07.01~2025.12.31",departure:"",notes:"479 ZH스탁/현금만",b2g:true},
+    {code:"ZH",route:"한국-중국/국제선루팅",bsp:"0%",overEY:"8%",overBZ:"",ticketing:"2025.07.01~2025.12.31",departure:"",notes:"",b2g:true},
+  ];
+}
+
+// RENDER HELPERS
+function gn(v){return parseFloat(String(v).replace(/[^0-9.]/g,''))||0;}
+function fmtRate(v){const s=String(v);return s.includes('%')?s:s+'%';}
+function isActive(t){if(!t)return false;const m=t.match(/~\s*(\d{4})[\./]?(\d{1,2})[\./]?(\d{1,2})?/);if(m)return new Date(parseInt(m[1]),parseInt(m[2])-1,parseInt(m[3]||'28'))>=new Date();return t.includes('2026')||t.includes('2027');}
+
+// RENDER: STATS
+function renderStats(){
+  const t=airlines.length,hb=airlines.filter(a=>gn(a.bsp)>0).length,ho=airlines.filter(a=>gn(a.over)>0).length,nc=airlines.filter(a=>gn(a.bsp)===0&&gn(a.over)===0).length;
+  document.getElementById('statsBar').innerHTML=`<div class="st"><div class="lb">전체 항공사</div><div class="vl">${t}</div></div><div class="st"><div class="lb">BSP 커미션</div><div class="vl bl">${hb}</div></div><div class="st"><div class="lb">오버커미션</div><div class="vl gn">${ho}</div></div><div class="st"><div class="lb">노커미션</div><div class="vl or">${nc}</div></div>`;
+}
+
+// RENDER: CARDS
+function renderCards(){
+  let list=[...airlines];
+  if(currentSearch){const q=currentSearch.toUpperCase();list=list.filter(a=>a.code.toUpperCase().includes(q));}
+  if(currentFilter==='bsp')list=list.filter(a=>gn(a.bsp)>0);
+  else if(currentFilter==='over')list=list.filter(a=>gn(a.over)>0);
+  else if(currentFilter==='nocom')list=list.filter(a=>gn(a.bsp)===0&&gn(a.over)===0);
+  const grid=document.getElementById('cardGrid'),empty=document.getElementById('emptyState');
+  if(!list.length){grid.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  grid.innerHTML=list.map(a=>{
+    const bn=gn(a.bsp),on=gn(a.over),cls=on>0?'ov':(bn>0?'bsp-only':'nc');
+    const hist=historyData.filter(h=>h.code===a.code);
+    const badges=[];
+    if(bn>0)badges.push(`<span class="badge bsp">BSP ${fmtRate(a.bsp)}</span>`);
+    if(on>0)badges.push(`<span class="badge over">오버컴 ${fmtRate(a.over)}</span>`);
+    if(!bn&&!on)badges.push(`<span class="badge nocom">노컴</span>`);
+    if(hist.some(h=>h.b2g))badges.push(`<span class="badge b2g">B2G</span>`);
+    const noteSnip=a.notes?`<div class="card-note">${a.notes}</div>`:'';
+    return`<div class="card ${cls}" onclick="navigate('detail','${encodeURIComponent(a.code)}')"><div class="card-top"><span class="card-code">${a.code}</span><div class="badges">${badges.join('')}</div></div><div class="card-rates"><div class="rate"><div class="rl">BSP</div><div class="rv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</div></div><div class="rate"><div class="rl">오버컴</div><div class="rv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div><div class="rate"><div class="rl">SOTO</div><div class="rv ${gn(a.soto)>0?'hi':'ze'}">${fmtRate(a.soto)}</div></div></div><div class="card-tags"><div class="tag">재발행 <b>${fmtRate(a.reissue)}</b></div><div class="tag">소아 <b>${fmtRate(a.chd)}</b></div><div class="tag">유아 <b>${fmtRate(a.inf)}</b></div></div>${noteSnip}<div class="card-arrow">상세 보기 →</div></div>`;
+  }).join('');
+}
+
+// RENDER: DETAIL
+function renderDetail(code){
+  const a=airlines.find(x=>x.code===code);if(!a){navigate('list');return;}
+  document.getElementById('detailCode').textContent=a.code;
+  const bn=gn(a.bsp),on=gn(a.over),badges=[];
+  if(bn>0)badges.push(`<span class="badge bsp">BSP ${fmtRate(a.bsp)}</span>`);
+  if(on>0)badges.push(`<span class="badge over">오버컴 ${fmtRate(a.over)}</span>`);
+  if(!bn&&!on)badges.push(`<span class="badge nocom">노컴</span>`);
+  document.getElementById('detailBadges').innerHTML=badges.join('');
+  const hist=historyData.filter(h=>h.code===code);
+  const noteHtml=a.notes?`<div class="note-box">${a.notes}</div>`:'';
+  const editBtn=isAdmin?`<button class="btn-secondary" onclick="navigate('admin');setTimeout(()=>{document.getElementById('adminAirlineSelect').value='${a.code}';loadAdminAirline('${a.code}')},100)" style="margin-left:auto;font-size:12px">수정하기</button>`:'';
+  document.getElementById('detailContent').innerHTML=`
+    <div class="detail-grid">
+      <div class="info-card"><h3>커미션율 요약</h3><div class="rate-grid">
+        <div class="rate-box"><div class="rb-label">BSP컴</div><div class="rb-value ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</div></div>
+        <div class="rate-box"><div class="rb-label">오버컴</div><div class="rb-value ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div>
+        <div class="rate-box"><div class="rb-label">SOTO</div><div class="rb-value ${gn(a.soto)>0?'hi':'ze'}">${fmtRate(a.soto)}</div></div>
+        <div class="rate-box"><div class="rb-label">재발행</div><div class="rb-value ${gn(a.reissue)>0?'hi':'ze'}">${fmtRate(a.reissue)}</div></div>
+        <div class="rate-box"><div class="rb-label">소아</div><div class="rb-value ${gn(a.chd)>0?'hi':'ze'}">${fmtRate(a.chd)}</div></div>
+        <div class="rate-box"><div class="rb-label">유아</div><div class="rb-value ${gn(a.inf)>0?'hi':'ze'}">${fmtRate(a.inf)}</div></div>
+      </div>${noteHtml}</div>
+      <div class="info-card"><h3>발권 주의사항</h3><div style="font-size:13px;color:#555;line-height:1.8">
+        ${a.notes?a.notes.split(/[.\/]/).filter(s=>s.trim().length>3).map(s=>`<div style="padding:6px 0;border-bottom:1px solid #F3F3F3">${s.trim()}</div>`).join(''):'<p style="color:#AAA;text-align:center;padding:20px">등록된 주의사항이 없습니다</p>'}
+      </div>${editBtn}</div>
+    </div>
+    <div class="history-section"><h3 style="display:flex;justify-content:space-between">커미션 히스토리<span style="font-size:12px;font-weight:400;color:#888">${hist.length}건</span></h3>
+      ${hist.length?`<table class="htbl"><thead><tr><th>노선</th><th>BSP</th><th>오버컴(EY)</th><th>오버컴(BZ)</th><th>발권기간</th><th>출발기간</th><th>비고</th></tr></thead><tbody>${hist.map(h=>`<tr class="${isActive(h.ticketing)?'cur':''}"><td class="rt">${h.b2g?'<span class="b2g-tag">B2G</span>':''}${h.route||'-'}</td><td>${h.bsp||'-'}</td><td>${h.overEY||'-'}</td><td>${h.overBZ||'-'}</td><td class="pr">${h.ticketing||'-'}</td><td class="pr">${h.departure||'-'}</td><td class="nc">${h.notes||'-'}</td></tr>`).join('')}</tbody></table>`:'<p style="color:#AAA;text-align:center;padding:30px">히스토리가 없습니다</p>'}
+    </div>
+    <div class="archive-section"><h3 style="display:flex;justify-content:space-between">아카이빙 자료<span style="font-size:12px;font-weight:400;color:#888">이미지/문서</span></h3>
+      <div class="img-grid">${(a.images&&a.images.length)?a.images.map(img=>`<div class="img-item" onclick="openImgModal('${img.url}','${img.label}')"><img src="${img.url}" alt="${img.label}"><div class="img-label">${img.label}</div></div>`).join(''):'<div class="no-images">등록된 아카이빙 자료가 없습니다.<br><span style="font-size:11px;color:#CCC;display:block;margin-top:4px">관리자 페이지에서 Google Drive 이미지 링크를 추가하세요</span></div>'}</div>
+    </div>`;
+}
+
+// ADMIN
+function showAdminPanel(){document.getElementById('adminLoginPrompt').style.display='none';document.getElementById('adminPanel').classList.add('visible');const s=document.getElementById('adminAirlineSelect');s.innerHTML='<option value="">항공사 선택...</option>'+airlines.map(a=>`<option value="${a.code}">${a.code}</option>`).join('');}
+
+function loadAdminAirline(code){
+  if(!code){document.getElementById('adminEditArea').innerHTML='';return;}
+  const a=airlines.find(x=>x.code===code);if(!a)return;
+  const hist=historyData.filter(h=>h.code===code);
+  document.getElementById('adminEditArea').innerHTML=`
+    <div class="edit-section"><h3>커미션율 수정 — ${a.code}</h3><div class="form-grid">
+      <div class="form-group"><label>BSP컴</label><input id="ed-bsp" value="${a.bsp}"></div>
+      <div class="form-group"><label>오버컴</label><input id="ed-over" value="${a.over}"></div>
+      <div class="form-group"><label>SOTO</label><input id="ed-soto" value="${a.soto}"></div>
+      <div class="form-group"><label>재발행</label><input id="ed-reissue" value="${a.reissue}"></div>
+      <div class="form-group"><label>소아(CHD)</label><input id="ed-chd" value="${a.chd}"></div>
+      <div class="form-group"><label>유아(INF)</label><input id="ed-inf" value="${a.inf}"></div>
+      <div class="form-group form-full"><label>비고 / 주의사항</label><textarea id="ed-notes" rows="3">${a.notes||''}</textarea></div>
+    </div><div class="btn-row"><button class="btn-primary" onclick="saveAirline('${code}')">저장</button></div></div>
+    <div class="edit-section"><h3>커미션 히스토리 관리</h3><div id="historyEditList">${hist.map((h,i)=>renderHistRow(h,i)).join('')}</div><div class="btn-add" onclick="addHistRow('${code}')">+ 히스토리 추가</div></div>
+    <div class="edit-section"><h3>아카이빙 이미지 관리</h3><p style="font-size:12px;color:#888;margin-bottom:12px">Google Drive에 업로드한 이미지의 공유 링크를 입력하세요</p>
+      <div id="imgManageGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">${(a.images||[]).map((img,i)=>`<div style="position:relative;border:1px solid #E8EAED;border-radius:8px;overflow:hidden"><img src="${img.url}" style="width:100%;height:100px;object-fit:cover"><button onclick="removeImage('${code}',${i})" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer">×</button><input value="${img.label}" onchange="updateImgLabel('${code}',${i},this.value)" style="width:100%;padding:6px 8px;border:none;border-top:1px solid #E8EAED;font-size:11px"></div>`).join('')}</div>
+      <div style="display:flex;gap:8px;margin-top:12px"><input id="newImgUrl" placeholder="Google Drive 이미지 URL" style="flex:1;padding:9px 12px;border:1.5px solid #D0D5DD;border-radius:7px;font-size:13px"><input id="newImgLabel" placeholder="설명" style="width:160px;padding:9px 12px;border:1.5px solid #D0D5DD;border-radius:7px;font-size:13px"><button class="btn-primary" onclick="addImage('${code}')" style="white-space:nowrap">추가</button></div>
+      <p style="font-size:11px;color:#AAA;margin-top:8px">* Drive 이미지 직접 링크: https://drive.google.com/uc?id=FILE_ID</p>
+    </div>`;
+}
+
+function renderHistRow(h,i){return`<div class="history-edit-row" data-idx="${i}"><input value="${h.route||''}" placeholder="노선" data-field="route"><input value="${h.bsp||''}" placeholder="BSP" data-field="bsp"><input value="${h.overEY||''}" placeholder="오버컴" data-field="overEY"><input value="${h.ticketing||''}" placeholder="발권기간" data-field="ticketing"><input value="${h.departure||''}" placeholder="출발기간" data-field="departure"><textarea placeholder="비고" data-field="notes">${h.notes||''}</textarea><button class="btn-remove" onclick="removeHistRow(${i})">×</button></div>`;}
+
+function addHistRow(code){historyData.push({code,route:'',bsp:'',overEY:'',overBZ:'',ticketing:'',departure:'',notes:'',b2g:false});document.getElementById('historyEditList').insertAdjacentHTML('beforeend',renderHistRow(historyData[historyData.length-1],historyData.length-1));}
+function removeHistRow(i){historyData.splice(i,1);const code=document.getElementById('adminAirlineSelect').value;loadAdminAirline(code);}
+
+function saveAirline(code){
+  const a=airlines.find(x=>x.code===code);if(!a)return;
+  a.bsp=document.getElementById('ed-bsp').value;a.over=document.getElementById('ed-over').value;
+  a.soto=document.getElementById('ed-soto').value;a.reissue=document.getElementById('ed-reissue').value;
+  a.chd=document.getElementById('ed-chd').value;a.inf=document.getElementById('ed-inf').value;
+  a.notes=document.getElementById('ed-notes').value;
+  const rows=document.querySelectorAll('#historyEditList .history-edit-row'),codeHist=[];
+  rows.forEach(row=>{codeHist.push({code,route:row.querySelector('[data-field="route"]').value,bsp:row.querySelector('[data-field="bsp"]').value,overEY:row.querySelector('[data-field="overEY"]').value,overBZ:'',ticketing:row.querySelector('[data-field="ticketing"]').value,departure:row.querySelector('[data-field="departure"]').value,notes:row.querySelector('[data-field="notes"]').value,b2g:false});});
+  historyData=historyData.filter(h=>h.code!==code).concat(codeHist);
+  renderStats();renderCards();showToast(`${code} 커미션 정보가 저장되었습니다`,'success');
+}
+
+function addImage(code){const a=airlines.find(x=>x.code===code);if(!a)return;const url=document.getElementById('newImgUrl').value.trim(),label=document.getElementById('newImgLabel').value.trim()||'이미지';if(!url){showToast('URL을 입력하세요','error');return;}let directUrl=url;const dm=url.match(/\/d\/([a-zA-Z0-9_-]+)/);if(dm)directUrl=`https://drive.google.com/uc?id=${dm[1]}`;if(!a.images)a.images=[];a.images.push({url:directUrl,label});loadAdminAirline(code);showToast('이미지가 추가되었습니다','success');}
+function removeImage(code,i){const a=airlines.find(x=>x.code===code);if(a&&a.images){a.images.splice(i,1);loadAdminAirline(code);}}
+function updateImgLabel(code,i,v){const a=airlines.find(x=>x.code===code);if(a&&a.images&&a.images[i])a.images[i].label=v;}
+function openSheetDirect(){window.open(SHEET_URL,'_blank');}
+
+// UTILS
+function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.className='toast '+(type||'')+' show';setTimeout(()=>t.classList.remove('show'),3500);}
+function openImgModal(url,label){document.getElementById('modalImg').src=url;document.getElementById('modalLabel').textContent=label;document.getElementById('imgModal').classList.add('show');}
+function closeModal(){document.getElementById('imgModal').classList.remove('show');}
+document.getElementById('imgModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal();});
+
+// EVENTS
+document.getElementById('searchInput').addEventListener('input',e=>{currentSearch=e.target.value.trim();renderCards();});
+document.querySelectorAll('.fbtn').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.fbtn').forEach(x=>x.classList.remove('act'));b.classList.add('act');currentFilter=b.dataset.f;renderCards();}));
+
+// INIT
+loadEmbeddedData();renderStats();renderCards();handleRoute();
+</script>
+</body>
+</html>
