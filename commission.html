@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>항공사 커미션 대시보드</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif; background: #f0f2f5; color: #1a1a2e; }
+  @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
+  /* Header */
+  .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; padding: 16px 32px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 12px rgba(0,0,0,0.15); display: flex; align-items: center; justify-content: space-between; }
+  .header-left { display: flex; align-items: center; gap: 24px; }
+  .header h1 { font-size: 20px; font-weight: 700; }
+  .header-nav { display: flex; gap: 4px; }
+  .header-nav a { color: #a0aec0; text-decoration: none; font-size: 13px; padding: 6px 14px; border-radius: 6px; transition: all 0.2s; }
+  .header-nav a:hover { color: #fff; background: rgba(255,255,255,0.1); }
+  .header-nav a.active { color: #fff; background: rgba(255,255,255,0.15); font-weight: 600; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+
+  /* Notice Bell */
+  .notice-bell { position: relative; cursor: pointer; padding: 6px; border-radius: 8px; transition: background 0.2s; }
+  .notice-bell:hover { background: rgba(255,255,255,0.1); }
+  .notice-bell svg { width: 20px; height: 20px; fill: #a0aec0; }
+  .notice-bell .badge-count { position: absolute; top: 2px; right: 2px; background: #e53e3e; color: #fff; font-size: 10px; font-weight: 700; width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .notice-dropdown { position: absolute; top: 40px; right: 0; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.15); width: 360px; max-height: 400px; overflow-y: auto; z-index: 200; display: none; }
+  .notice-dropdown.show { display: block; }
+  .notice-dropdown-header { padding: 14px 16px; border-bottom: 1px solid #e2e8f0; font-weight: 700; font-size: 14px; color: #1a1a2e; display: flex; justify-content: space-between; align-items: center; }
+  .notice-item { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; cursor: default; }
+  .notice-item:last-child { border-bottom: none; }
+  .notice-item .notice-title { font-weight: 600; font-size: 13px; color: #1a1a2e; margin-bottom: 4px; }
+  .notice-item .notice-body { font-size: 12px; color: #4a5568; line-height: 1.5; }
+  .notice-item .notice-date { font-size: 11px; color: #a0aec0; margin-top: 6px; }
+  .notice-item.urgent { border-left: 3px solid #e53e3e; background: #fff5f5; }
+  .notice-empty { padding: 32px 16px; text-align: center; color: #a0aec0; font-size: 13px; }
+
+  /* Notice Banner */
+  .notice-banner { background: linear-gradient(90deg, #fff7ed 0%, #fffbeb 100%); border-bottom: 1px solid #fed7aa; padding: 10px 32px; display: flex; align-items: center; gap: 10px; font-size: 13px; color: #92400e; }
+  .notice-banner .notice-icon { font-size: 16px; flex-shrink: 0; }
+  .notice-banner .notice-text { flex: 1; }
+  .notice-banner .close-btn { cursor: pointer; color: #b45309; font-size: 18px; padding: 0 4px; }
+  .notice-banner.hidden { display: none; }
+
+  /* Login */
+  .login-area { display: flex; align-items: center; gap: 8px; }
+  .login-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+  .login-btn:hover { background: rgba(255,255,255,0.2); }
+  .user-info { font-size: 12px; color: #a0aec0; }
+  .user-info strong { color: #fff; }
+
+  /* Stats Bar */
+  .stats-bar { display: flex; gap: 16px; padding: 16px 32px; background: #fff; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap; }
+  .stat-card { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 20px; min-width: 140px; }
+  .stat-card .label { font-size: 11px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-card .value { font-size: 24px; font-weight: 700; color: #1a1a2e; margin-top: 2px; }
+  .stat-card .value.blue { color: #3182ce; }
+  .stat-card .value.green { color: #38a169; }
+  .stat-card .value.orange { color: #dd6b20; }
+  .stat-card .value.purple { color: #6b46c1; }
+
+  /* Controls */
+  .controls { display: flex; gap: 12px; padding: 16px 32px; background: #fff; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap; align-items: center; }
+  .search-box { position: relative; flex: 1; min-width: 200px; max-width: 400px; }
+  .search-box input { width: 100%; padding: 10px 14px 10px 38px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; outline: none; transition: border-color 0.2s; }
+  .search-box input:focus { border-color: #3182ce; box-shadow: 0 0 0 3px rgba(49,130,206,0.1); }
+  .search-box .icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9ca3af; font-size: 16px; }
+  .filter-btn { padding: 8px 16px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; font-size: 13px; cursor: pointer; transition: all 0.2s; color: #4a5568; }
+  .filter-btn:hover { background: #f7fafc; }
+  .filter-btn.active { background: #ebf5ff; border-color: #3182ce; color: #3182ce; font-weight: 600; }
+  .view-toggle { display: flex; border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; margin-left: auto; }
+  .view-toggle button { padding: 8px 14px; border: none; background: #fff; font-size: 13px; cursor: pointer; color: #4a5568; transition: all 0.2s; }
+  .view-toggle button.active { background: #1a1a2e; color: #fff; }
+
+  /* Main Content */
+  .main { padding: 20px 32px; max-width: 1600px; margin: 0 auto; }
+
+  /* Card Grid */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
+
+  /* Airline Card */
+  .airline-card { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; transition: box-shadow 0.2s, transform 0.15s; cursor: pointer; }
+  .airline-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); transform: translateY(-1px); }
+  .airline-card.has-overcom { border-left: 4px solid #38a169; }
+  .airline-card.no-com { border-left: 4px solid #e2e8f0; }
+  .airline-card.kea { border-left: 4px solid #6b46c1; }
+
+  .card-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 12px; }
+  .airline-code { font-size: 28px; font-weight: 800; color: #1a1a2e; letter-spacing: 1px; }
+  .airline-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+  .badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge.bsp { background: #ebf5ff; color: #2b6cb0; }
+  .badge.over { background: #f0fff4; color: #276749; }
+  .badge.expired { background: #fff5f5; color: #c53030; }
+  .badge.kea { background: #faf5ff; color: #6b46c1; }
+
+  .card-rates { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 0 20px 12px; }
+  .rate-item { text-align: center; padding: 8px; background: #f7fafc; border-radius: 8px; }
+  .rate-item .rate-label { font-size: 10px; color: #718096; text-transform: uppercase; letter-spacing: 0.3px; }
+  .rate-item .rate-value { font-size: 16px; font-weight: 700; margin-top: 2px; }
+  .rate-item .rate-value.highlight { color: #38a169; }
+  .rate-item .rate-value.zero { color: #cbd5e0; }
+
+  .card-details { padding: 0 20px 12px; }
+  .detail-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .detail-tag { font-size: 11px; color: #4a5568; background: #f7fafc; padding: 3px 8px; border-radius: 4px; }
+  .detail-tag span { font-weight: 600; }
+
+  .card-notes { padding: 8px 20px; background: #fffbeb; border-top: 1px solid #fef3c7; font-size: 12px; color: #92400e; line-height: 1.5; }
+
+  /* Account Code */
+  .card-account { padding: 8px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; }
+  .account-label { font-size: 11px; color: #718096; }
+  .account-value { font-size: 13px; font-weight: 600; color: #1a1a2e; font-family: 'Courier New', monospace; }
+  .copy-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; font-size: 11px; cursor: pointer; color: #4a5568; transition: all 0.2s; }
+  .copy-btn:hover { background: #ebf5ff; border-color: #3182ce; color: #3182ce; }
+  .copy-btn.copied { background: #f0fff4; border-color: #38a169; color: #38a169; }
+  .copy-btn svg { width: 12px; height: 12px; }
+
+  /* List View */
+  .list-view { display: none; }
+  .list-view.active { display: block; }
+  .card-grid-wrap.active { display: grid; }
+  .card-grid-wrap { display: none; }
+
+  .list-table { width: 100%; background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; font-size: 13px; border-collapse: collapse; }
+  .list-table thead th { background: #1a1a2e; color: #fff; padding: 12px 14px; text-align: left; font-weight: 600; font-size: 12px; position: sticky; top: 0; white-space: nowrap; }
+  .list-table tbody td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  .list-table tbody tr { cursor: pointer; transition: background 0.15s; }
+  .list-table tbody tr:hover td { background: #f7fafc; }
+  .list-table .com-cell { font-weight: 700; text-align: center; }
+  .list-table .com-cell.has-value { color: #38a169; }
+  .list-table .com-cell.no-value { color: #cbd5e0; }
+  .list-table .acct-cell { font-family: 'Courier New', monospace; font-size: 12px; }
+
+  /* History Section */
+  .history-toggle { width: 100%; padding: 10px 20px; background: #f7fafc; border: none; border-top: 1px solid #e2e8f0; font-size: 13px; color: #4a5568; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: background 0.2s; }
+  .history-toggle:hover { background: #edf2f7; }
+  .history-toggle .arrow { transition: transform 0.3s; }
+  .history-toggle.open .arrow { transform: rotate(180deg); }
+  .history-panel { max-height: 0; overflow: hidden; transition: max-height 0.4s ease; }
+  .history-panel.open { max-height: 2000px; }
+  .history-table { width: 100%; font-size: 12px; border-collapse: collapse; }
+  .history-table th { background: #f1f5f9; padding: 8px 12px; text-align: left; font-weight: 600; color: #475569; }
+  .history-table td { padding: 8px 12px; border-top: 1px solid #f1f5f9; vertical-align: top; }
+  .history-table tr:hover td { background: #f7fafc; }
+  .history-table .route { font-weight: 600; color: #1a1a2e; }
+  .history-table .period { color: #718096; white-space: nowrap; }
+  .history-table .note-cell { max-width: 250px; line-height: 1.4; color: #4a5568; }
+  .history-table tr.is-current { background: #f0fff4; }
+  .history-table tr.is-current td { border-left: 3px solid #38a169; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1a1a2e; color: #fff; padding: 12px 24px; border-radius: 10px; font-size: 14px; z-index: 1000; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+
+  /* Empty State */
+  .empty-state { text-align: center; padding: 60px 20px; color: #a0aec0; }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state p { font-size: 15px; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .header { flex-direction: column; gap: 12px; padding: 12px 16px; }
+    .header-left { flex-direction: column; gap: 8px; }
+    .controls, .stats-bar, .main { padding-left: 16px; padding-right: 16px; }
+    .card-grid { grid-template-columns: 1fr; }
+    .notice-dropdown { width: 300px; right: -60px; }
+  }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #f1f5f9; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>항공사 커미션 대시보드</h1>
+    <nav class="header-nav">
+      <a href="#list" class="active">커미션 관리</a>
+      <a href="#admin">관리자</a>
+    </nav>
+  </div>
+  <div class="header-right">
+    <div class="notice-bell" id="noticeBell" onclick="toggleNoticeDropdown(event)">
+      <svg viewBox="0 0 24 24"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+      <span class="badge-count" id="noticeBadge" style="display:none;">0</span>
+    </div>
+    <div class="notice-dropdown" id="noticeDropdown">
+      <div class="notice-dropdown-header">
+        <span>공지사항</span>
+      </div>
+      <div id="noticeList"></div>
+    </div>
+    <div class="login-area" id="loginArea">
+      <button class="login-btn" onclick="handleLogin()">Google 로그인</button>
+    </div>
+  </div>
+</div>
+
+<div class="notice-banner hidden" id="noticeBanner">
+  <span class="notice-icon">&#128226;</span>
+  <span class="notice-text" id="bannerText"></span>
+  <span class="close-btn" onclick="this.parentElement.classList.add('hidden')">&times;</span>
+</div>
+
+<div id="mainApp">
+  <!-- LIST VIEW -->
+  <div id="listPage">
+    <div class="stats-bar" id="statsBar"></div>
+    <div class="controls">
+      <div class="search-box">
+        <span class="icon">&#128269;</span>
+        <input type="text" id="searchInput" placeholder="항공사 코드로 검색 (예: AA, BR, NH)">
+      </div>
+      <button class="filter-btn" data-filter="has-over">오버컴</button>
+      <button class="filter-btn" data-filter="has-bsp">BSP컴</button>
+      <button class="filter-btn" data-filter="kea">KE@A</button>
+      <button class="filter-btn active" data-filter="all">전체</button>
+      <div class="view-toggle">
+        <button class="active" data-view="card">카드형</button>
+        <button data-view="list">리스트형</button>
+      </div>
+    </div>
+    <div class="main">
+      <div class="card-grid-wrap active card-grid" id="cardGrid"></div>
+      <div class="list-view" id="listView"></div>
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <div class="icon">&#9992;&#65039;</div>
+        <p>검색 결과가 없습니다</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN PAGE -->
+  <div id="adminPage" style="display:none;">
+    <div class="main">
+      <div style="background:#fff;border-radius:12px;border:1px solid #e2e8f0;padding:24px;margin-bottom:20px;">
+        <h2 style="font-size:18px;font-weight:700;margin-bottom:16px;">공지사항 관리</h2>
+        <div id="adminNoticeList" style="margin-bottom:16px;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <input type="text" id="noticeTitle" placeholder="공지 제목" style="flex:1;min-width:150px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+          <input type="text" id="noticeBody" placeholder="공지 내용" style="flex:2;min-width:200px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:#4a5568;"><input type="checkbox" id="noticeUrgent"> 긴급</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:#4a5568;"><input type="checkbox" id="noticeBanner"> 배너표시</label>
+          <button onclick="addNotice()" style="padding:8px 16px;background:#1a1a2e;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;">추가</button>
+        </div>
+      </div>
+
+      <div style="background:#fff;border-radius:12px;border:1px solid #e2e8f0;padding:24px;margin-bottom:20px;">
+        <h2 style="font-size:18px;font-weight:700;margin-bottom:16px;">Slack 알림 설정</h2>
+        <p style="font-size:13px;color:#4a5568;margin-bottom:12px;">커미션 변동 사항이 있을 때 Slack 채널로 자동 알림을 보냅니다.</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <label style="font-size:13px;color:#4a5568;">Webhook URL:</label>
+          <input type="text" id="slackWebhook" placeholder="https://hooks.slack.com/services/..." style="flex:1;min-width:300px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:monospace;">
+          <button onclick="saveSlackWebhook()" style="padding:8px 16px;background:#4A154B;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;">저장</button>
+          <button onclick="testSlackNotification()" style="padding:8px 16px;background:#fff;color:#4A154B;border:1px solid #4A154B;border-radius:6px;font-size:13px;cursor:pointer;">테스트 발송</button>
+        </div>
+        <div style="margin-top:12px;padding:12px;background:#f7fafc;border-radius:8px;">
+          <p style="font-size:12px;color:#718096;margin-bottom:8px;">Slack 채널: <a href="https://myrealtrip.slack.com/archives/C3B1YCYJG" target="_blank" style="color:#3182ce;">#aicx</a></p>
+          <p style="font-size:12px;color:#718096;">Webhook 설정 방법: Slack App 관리 &gt; Incoming Webhooks &gt; 워크스페이스에 추가 &gt; 채널 선택 (#aicx) &gt; Webhook URL 복사</p>
+        </div>
+      </div>
+
+      <div style="background:#fff;border-radius:12px;border:1px solid #e2e8f0;padding:24px;">
+        <h2 style="font-size:18px;font-weight:700;margin-bottom:16px;">커미션 데이터 편집</h2>
+        <p style="font-size:13px;color:#4a5568;margin-bottom:12px;">Google Sheets에서 직접 편집하세요.</p>
+        <a href="https://docs.google.com/spreadsheets/d/12qqW-NFFxbcvQa_whjoe2LRseCTVwWcLt07AvJzxcVs/edit" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:10px 20px;background:#34a853;color:#fff;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z"/><path d="M7 12h2v5H7zm4-3h2v8h-2zm4-3h2v11h-2z"/></svg>
+          Google Sheets에서 편집하기
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============ DATA ============
+const TODAY = new Date();
+
+const airlines = [
+  {code:"AA",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"RP 0컴 KE@A"},
+  {code:"AC",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"26년 4월 한 달 오버컴 제공으로 설정. 25.10.1 오버컴 연장 미확정으로 VOF 컴 0% 설정"},
+  {code:"AF/KL",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"AI",bsp:1,over:0,soto:1,reissue:0,chd:1,inf:0,accountCode:"",notes:""},
+  {code:"AM",bsp:3,over:0,soto:0,reissue:0,chd:3,inf:3,accountCode:"",notes:""},
+  {code:"AT",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"AV",bsp:1,over:0,soto:1,reissue:0,chd:0,inf:0,accountCode:"",notes:""},
+  {code:"AY",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"RA 제외 설정OK"},
+  {code:"BA",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"BI",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:""},
+  {code:"BR",bsp:5,over:3,soto:3,reissue:0,chd:"BSP5+오버3",inf:"BSP5+오버3",accountCode:"",notes:"BSP 5% + 오버컴 3% = 총 8%. SOTO 3% 고정 지급. 오버컴 ~26.6.30까지 적용 가능 (소아,유아OK). OZ C/D O 그외 C/D X. 인천/김포/부산 출발-모든 EVR 온라인 목적지"},
+  {code:"CA",bsp:3,over:0,soto:0,reissue:0,chd:3,inf:0,accountCode:"",notes:"10/1 BSP 기본컴 부활 / OZ 공동운항 불가"},
+  {code:"ZH",bsp:3,over:0,soto:0,reissue:0,chd:3,inf:0,accountCode:"",notes:"25.1.1부터 ZH 479스탁으로 발권 가능 / ONLY CASH. 10/13 BSP 기본컴 부활 / ZH,CA,SC 제외 공동운항 불가"},
+  {code:"CI",bsp:3,over:7,soto:0,reissue:0,chd:"BSP3 오버컴7",inf:0,accountCode:"",notes:"C/D, OAL 결합시에도 적용. 26년 1월 1일부터 10% 적용 및 설정 OK. ~26.12.31"},
+  {code:"CX",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"CZ",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"DL",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"DT",bsp:6,over:0,soto:6,reissue:0,chd:6,inf:0,accountCode:"",notes:""},
+  {code:"EK",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"ET",bsp:5,over:3,soto:5,reissue:0,chd:5,inf:5,accountCode:"",notes:"ICN발 오버 8컴 (~26.06.30) / 분기별 연장 체크 필요"},
+  {code:"EY",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"IT 요금 커미션 자동반영 / RA 제외 설정OK"},
+  {code:"FI",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:""},
+  {code:"FJ",bsp:5,over:0,soto:5,reissue:0,chd:5,inf:5,accountCode:"",notes:""},
+  {code:"GA",bsp:1,over:0,soto:1,reissue:0,chd:1,inf:1,accountCode:"",notes:""},
+  {code:"GS",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"25년 2분기부터 GS항공 커미션 미제공 KE@A"},
+  {code:"G3",bsp:5,over:0,soto:5,reissue:0,chd:5,inf:5,accountCode:"",notes:""},
+  {code:"HA",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"617",notes:"KE@A. ID:617번 / 비고사항은 오버컴 탭 확인 (617제외 KE@A 적용)"},
+  {code:"HB",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"CLS B,E,N,O,Q,X,Y 0컴 설정 / 그외 GDS 자동반영"},
+  {code:"HX",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"OZ 공동운항만 설정"},
+  {code:"JL",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:""},
+  {code:"KC",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:""},
+  {code:"KQ",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:""},
+  {code:"LA",bsp:0,over:3,soto:"0/3",reissue:0,chd:"0/3",inf:0,accountCode:"",notes:"3개월마다 실적에 따라 연장 및 종료 / 3분기에 확인 필요. Long haul 구간만 오버컴. ~26.6.30"},
+  {code:"LH",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"LJ",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"LO",bsp:0,over:2,soto:0,reissue:0,chd:0,inf:0,accountCode:"563",notes:"ID 563"},
+  {code:"LX",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"LY",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"COM@A"},
+  {code:"MH",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"MU",bsp:3,over:0,soto:0,reissue:0,chd:3,inf:0,accountCode:"",notes:"FM/MU 일 때만 커미션 지급. 별도 공지 전까지 3컴 유지 (중국노선)"},
+  {code:"NH",bsp:0,over:7,soto:0,reissue:0,chd:7,inf:7,accountCode:"",notes:"26.4.1부 어카운트 코드 변경 (~26.9.30) / 한일노선만 오버컴 / 0%은 ~26.12.31까지 셋업"},
+  {code:"NX",bsp:2,over:0,soto:2,reissue:0,chd:2,inf:2,accountCode:"",notes:""},
+  {code:"NZ",bsp:3,over:0,soto:3,reissue:0,chd:3,inf:3,accountCode:"",notes:""},
+  {code:"OD",bsp:5,over:0,soto:5,reissue:0,chd:5,inf:0,accountCode:"",notes:"25.8.21부 스탠다드 컴으로 다시 변경. 26.2.12부 5%으로 변경 공지"},
+  {code:"OM",bsp:5,over:0,soto:0,reissue:0,chd:5,inf:5,accountCode:"",notes:"C/S 0컴"},
+  {code:"OS",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"OU",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"PG",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"PR",bsp:3,over:0,soto:3,reissue:3,chd:3,inf:3,accountCode:"",notes:"2026.01.16부터 프론트 컴으로 변경. SOTO 가능, CHD/INF 포함, 차터 불가, 재발행도 컴 적용 가능"},
+  {code:"QF",bsp:1,over:0,soto:0,reissue:0,chd:1,inf:1,accountCode:"",notes:"JQ C/S 적용 가능 / 한국발만 적용 / QF 운임 사용 / INF 가능"},
+  {code:"QR",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"QV",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"SA",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"SC",bsp:3,over:0,soto:0,reissue:0,chd:3,inf:0,accountCode:"",notes:"26년 SC항공 커미션 공지. ~26.12.31"},
+  {code:"SQ",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"RA 제외 설정OK"},
+  {code:"SV",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"TG",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"TK",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"SUPP COMM으로 빌링 반영 중"},
+  {code:"TP",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"COM@A"},
+  {code:"TR",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"TW",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"UA",bsp:0,over:4,soto:0,reissue:0,chd:4,inf:4,accountCode:"",notes:"0컴 적용 노선 작업OK (~26.12.31). 26년 9월 30일까지 TOT 커미션 적용 OK"},
+  {code:"UK",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"UL",bsp:5,over:0,soto:5,reissue:0,chd:5,inf:0,accountCode:"",notes:""},
+  {code:"VJ",bsp:2.5,over:0,soto:2.5,reissue:0,chd:2.5,inf:0,accountCode:"",notes:"한국 노선 포함시에만 적용 가능. 26년 5월 31일까지 2.5컴. ICN 도착만 SOTO 가능"},
+  {code:"VN",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"RA 제외 설정OK"},
+  {code:"VT",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"COM@A"},
+  {code:"YP",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"ZE",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"592/593",notes:"592(국내)/593(해외출발) - RD제외 설정OK (KE@A에서 ZE 제외)"},
+  {code:"3U",bsp:1,over:0,soto:0,reissue:0,chd:1,inf:0,accountCode:"",notes:"한국발국제선 3% (ICN=TFU, CJJ=DYG, TAE=DYG, MWX=DYG). ~26.12.31"},
+  {code:"5J",bsp:2,over:0,soto:2,reissue:0,chd:2,inf:2,accountCode:"",notes:"Private Fare (F,R,I) 발권 시 자동 적용, 이외 클래스는 수동. ~26.6.30"},
+  {code:"7C",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"8M",bsp:"5/3",over:0,soto:3,reissue:0,chd:"5/3",inf:0,accountCode:"",notes:"ICN출발 5%, D/S CLS 3%. 합산 아님"},
+  {code:"VZ",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"1월 1일부터 0%. KE@A COM@A"},
+  {code:"VS",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"변경/환불 가능, NO-SHOW 시 환불/변경 불가"},
+  {code:"SL",bsp:5,over:0,soto:5,reissue:0,chd:5,inf:0,accountCode:"",notes:"RA 환불만 가능. 예약 및 발권 기한: D-30 이전 예약 시 24시간 이내 발권"},
+  {code:"AS",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"KE@A"},
+  {code:"C6",bsp:2,over:0,soto:2,reissue:0,chd:2,inf:0,accountCode:"",notes:""},
+  {code:"9G",bsp:0,over:3,soto:0,reissue:0,chd:3,inf:3,accountCode:"",notes:"오버컴 자동 적용. ICN-PQC 노선. 추후 변동 가능성 有"},
+  {code:"JX",bsp:5,over:0,soto:3,reissue:0,chd:5,inf:5,accountCode:"",notes:""},
+  {code:"DV",bsp:0,over:0,soto:0,reissue:0,chd:0,inf:0,accountCode:"",notes:"인천-쉼켄트(ICN-CIT). 중복 예약 3회 이상 시 seg*인원당 USD 45"},
+];
+
+const history = [
+  {code:"AA",route:"중남미",bsp:"0%",overEY:"7%",overBZ:"0%",ticketing:"~2025.06.30",departure:"제한 없음",notes:"프라이빗 정규 운임. 한국 출발, 미주/중남미/캐나다 적용"},
+  {code:"AA",route:"미주",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"~2025.06.30",departure:"제한 없음",notes:""},
+  {code:"AA",route:"미주,중남미,캐나다",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"~2023.7.31",departure:"",notes:"계약 x, 특가 형태로 제공"},
+  {code:"AC",route:"한국 출발 전체 (YVR/YUL 포함 여정)",bsp:"0%",overEY:"2%",overBZ:"",ticketing:"2026.04.01~2026.04.30",departure:"여정 내 2026.06.01~06.30 포함",notes:"AC64(밴쿠버행) 혹은 AC68(몬트리올행) 포함 필수. SOTO&그룹 불가, 영/유아 가능"},
+  {code:"AC",route:"한국출발-미국·중남미",bsp:"0%",overEY:"3%",overBZ:"",ticketing:"2025.09.01~2025.09.30",departure:"2025.09.01~",notes:"한국 출발만 가능/SOTO 불가. All class. 소아,유아 적용"},
+  {code:"AC",route:"한국출발-YVR/YYZ/YUL",bsp:"0%",overEY:"4%",overBZ:"",ticketing:"2025.08.06~2025.09.30",departure:"2025.09.01~2025.11.30",notes:"목적지가 해당 노선이면 경유도 가능"},
+  {code:"AC",route:"캐나다",bsp:"0%",overEY:"3%",overBZ:"",ticketing:"2024.10.1-2025.06.30",departure:"",notes:"25년 6월 30일까지 적용. AC 전노선 3컴. 7월 1일 부 노컴 적용"},
+  {code:"AC",route:"ICN-YVR/YYZ 한정",bsp:"",overEY:"7%",overBZ:"",ticketing:"2025.05.15~2025.06.14",departure:"2025.07.01~2025.10.31",notes:"YVR/YYZ ONLY (SOTO 적용 불가)"},
+  {code:"AC",route:"미국/캐나다/중남미",bsp:"0%",overEY:"종료",overBZ:"",ticketing:"2025.03.20-2025.04.30",departure:"2025.03.20~2026.01.31",notes:"기존 커미션+3% 추가. 소아/유아 동일. 공동운항편/SOTO 제외"},
+  {code:"AC",route:"AC67/AC68 포함 노선",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"2024.4.1~6.28",departure:"2024.6.19~10.25",notes:"Commission Box에 기존3%+추가2%=총5%. 일반석 G,K,L,T,S,W,V,Q,H,U,M"},
+  {code:"AC",route:"미주,중남미,캐나다",bsp:"0%",overEY:"3%",overBZ:"",ticketing:"2023.1.1~12.31",departure:"",notes:"계약 X 메일로 전달받음"},
+  {code:"AC",route:"미주,중남미,캐나다",bsp:"0%",overEY:"2%",overBZ:"",ticketing:"~2022.12.31",departure:"",notes:"메일(서면계약), 담당자 조혜진님"},
+  {code:"BR",route:"한국 출발(인천/김포/부산) ONLY",bsp:"5%",overEY:"3%",overBZ:"",ticketing:"2025.02.01~2026.04.30",departure:"제한 없음",notes:"ICN/GMP/PUS 출발 모든 온라인 목적지. SOTO/투어코드 있는 요금 불가 (SOTO 3% 고정)"},
+  {code:"BR",route:"ICN-BKK/CNX 한정",bsp:"",overEY:"종료",overBZ:"",ticketing:"2025.04.01~2025.04.30",departure:"2025.4.1~12.18 (제외기간 있음)",notes:"적용 CLS: Q/S/W/V. 어카운트코드: FXP/R,U*EVA008. 투어코드: FSV009"},
+  {code:"BR",route:"ICN-SEA/SFO/LAX 한정",bsp:"",overEY:"노컴(할인운임변경)",overBZ:"",ticketing:"2025.05.05~2025.05.19",departure:"2025.05.05~2025.12.10",notes:"적용 CLS: P/S/W/V. 어카운트코드: FXP/R,U*EVA010. 투어코드: FSV011"},
+  {code:"CI",route:"전노선 (26.1.1~26.12.31)",bsp:"3%",overEY:"7%",overBZ:"",ticketing:"2025.08.01~2026.12.31",departure:"2026.01.01~2026.12.31",notes:"한국출발-All destination. 제외: 전세기,SOTO,GV,INF. CI 스탁+OAL 코드쉐어도 오버컴 가능"},
+  {code:"CI",route:"전노선 (~7월 31일까지)",bsp:"3%",overEY:"4%",overBZ:"",ticketing:"2025.02.10~2025.07.31",departure:"",notes:"한국출발-All destination. 제외: 전세기,SOTO,GV,INF"},
+  {code:"CI",route:"전노선",bsp:"3%",overEY:"1%",overBZ:"",ticketing:"2024.1.1~1.10",departure:"",notes:"한국출발-All destination"},
+  {code:"CI",route:"전노선",bsp:"3%",overEY:"1%",overBZ:"",ticketing:"2023.7.20~12.31",departure:"",notes:"한국출발-All destination"},
+  {code:"CI",route:"전노선",bsp:"3%",overEY:"2%",overBZ:"",ticketing:"2023.1.1~7.19",departure:"",notes:"한국출발-All destination"},
+  {code:"CI",route:"전노선",bsp:"3%",overEY:"5%",overBZ:"",ticketing:"2022.01.01~2022.12.31",departure:"",notes:"하반기 커미션 안내. 발권 12.2~12.16 & 출발 23.2.1~6.30 오버컴 X"},
+  {code:"CA",route:"한국-중국 / 국내선 루팅",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"2025.07.01~2025.09.30",departure:"",notes:"한국 출발. 기업체/지정대리점 특가/SOTO/유아 불가. ZH/SC 제외 공동운항 불가"},
+  {code:"CA",route:"한국-중국 / 국제선 루팅",bsp:"0%",overEY:"3%",overBZ:"",ticketing:"2025.07.01~2025.09.30",departure:"",notes:"한국 출발. 기업체/지정대리점/SOTO/유아 불가"},
+  {code:"CA",route:"서울-중국 / 국제선루팅",bsp:"0%",overEY:"3%",overBZ:"",ticketing:"2024.1.1~3.31",departure:"",notes:"서울 출발"},
+  {code:"CA",route:"부산-중국 / 국제선루팅",bsp:"0%",overEY:"1%",overBZ:"",ticketing:"2024.1.1~3.31",departure:"",notes:"부산 출발"},
+  {code:"CA",route:"서울-중국 / 국제선루팅",bsp:"0%",overEY:"3%",overBZ:"",ticketing:"2023.7.1~12.31",departure:"",notes:"서울 출발"},
+  {code:"CA",route:"서울출발-중국노선",bsp:"0%",overEY:"2%",overBZ:"",ticketing:"2022.12.27~2023.3.31",departure:"",notes:"제외: CA 서울출발 중국경유 국제선, OZ/ZH CDSHR, 유아, 국제선SOTO"},
+  {code:"ZH",route:"한국-중국 / 국내선 루팅",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"2025.07.01~2025.12.31",departure:"",notes:"한국 출발. INF 불가. ZH/CA 제외 기타 항공사 포함 불가. 재발행 불가. 479 ZH 스탁/현금만"},
+  {code:"ZH",route:"한국-중국 / 국제선 루팅",bsp:"0%",overEY:"8%",overBZ:"",ticketing:"2025.07.01~2025.12.31",departure:"",notes:""},
+  {code:"ZH",route:"한국-중국 / 국제선루팅",bsp:"0%",overEY:"3%",overBZ:"",ticketing:"2024.1.1~3.31",departure:"",notes:"한국 출발"},
+  {code:"ZH",route:"한국-중국 / 국제선루팅",bsp:"0%",overEY:"3%",overBZ:"",ticketing:"2023.7.1~12.31",departure:"",notes:"한국 출발"},
+  {code:"ZH",route:"한국-중국 / 국제선루팅",bsp:"0%",overEY:"4%",overBZ:"",ticketing:"2023.1.1~3.31",departure:"",notes:"한국 출발"},
+  {code:"SC",route:"ICN-TAO/YNT (OW/RT)",bsp:"3%",overEY:"4%",overBZ:"",ticketing:"2025.10.01~2025.12.31",departure:"2025.10.01~2026.03.28",notes:"ADT/CNN만. 코드쉐어 불가. 직항/경유 모두 4%"},
+  {code:"SC",route:"ICN-TAO, ICN-YNT (OW/RT)",bsp:"3%",overEY:"2%",overBZ:"",ticketing:"2025.04.01~2025.09.30",departure:"2025.04.01~2026.03.28",notes:"ADT/CNN만. 코드쉐어 불가. 첫구간 기준"},
+  {code:"UA",route:"미주,중남미,캐나다",bsp:"0%",overEY:"4%",overBZ:"",ticketing:"2025.07.03~2026.09.30",departure:"각 운임 규정에 따름",notes:"수동발권. BASIC ECO 불가. G,K CLS 포함(24년10월부터)"},
+  {code:"UA",route:"미주,중남미,캐나다",bsp:"0%",overEY:"8%",overBZ:"",ticketing:"2023.7.1~12.31",departure:"",notes:"투어코드: 981GU 981UT"},
+  {code:"UA",route:"미주,중남미,캐나다",bsp:"0%",overEY:"9.25%",overBZ:"",ticketing:"2023.4.1~6.30",departure:"",notes:"투어코드: 981GU 981UT"},
+  {code:"UA",route:"미주,중남미,캐나다",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"~2023.3.31",departure:"",notes:"투어코드: 981GU 981UT. 해외출발 커미션 해당X"},
+  {code:"UA",route:"미주,중남미,캐나다",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"~2022.12.31",departure:"",notes:"Basic Economy Fare 커미션 가능(7.1~12.31). 투어코드:981GU"},
+  {code:"UA",route:"미주,중남미,캐나다",bsp:"0%",overEY:"4.5%",overBZ:"",ticketing:"2023.1.1~3.31",departure:"",notes:"투어코드: 981GU 981UT"},
+  {code:"NH",route:"한국출발-일본노선",bsp:"0%",overEY:"7%",overBZ:"",ticketing:"2025.10.01~2026.09.30",departure:"2025.10.01~2027.09.30",notes:"투어코드:PP6KRTOT01. 1A:323032, 1G:KRJ92. C,D,Z/Y,B,M,U,H,Q,V,W,S (P,L,K 제외). 타항공결합+C/S 제외"},
+  {code:"NH",route:"한국출발-일본노선",bsp:"0%",overEY:"7%",overBZ:"",ticketing:"2025.04.01~2025.09.30",departure:"2025.04.01~2026.09.30",notes:"투어코드:PP5KRTOT01. 1A:99184, 1G:KRJ92"},
+  {code:"NH",route:"한국출발-일본노선",bsp:"0%",overEY:"7%",overBZ:"",ticketing:"2024.10.31~2025.3.31",departure:"2024.10.1~2026.3.31",notes:"투어코드:PP3KRTOT05. 어카운트코드:662693"},
+  {code:"NH",route:"한국출발-일본노선",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"2023.4.1~9.30",departure:"2023.4.1~2024.8.31",notes:"C,D,Z,P/Y,B,M,U,H,Q,V,W,S (L,K 제외)"},
+  {code:"LA",route:"Long haul 구간 (LA Stock)",bsp:"0%",overEY:"EY3%/BZ5%",overBZ:"5%",ticketing:"2026.04.01~2026.06.30",departure:"2026.04.01~2027.06.30",notes:"J Cabin: 5%/ODKRI89606. J+Y,J+W: 3%/ODKRI89607. Y,W: 3%/ODKRI89607. INF 미적용"},
+  {code:"LA",route:"Long haul 구간",bsp:"0%",overEY:"BZ6%/EY4%",overBZ:"6%",ticketing:"2025.4.1~2025.06.30",departure:"2025.04.01~2026.06.30",notes:"비즈니스ODKRI89606/이코노미&프이코ODKRI89607. 남미출발 오버컴 적용 금지"},
+  {code:"LA",route:"Long haul 구간",bsp:"0%",overEY:"4%",overBZ:"",ticketing:"2023.1.1~2024.3.31",departure:"~2025.3.31",notes:"TOUR CODE:8022423. 국내선/남미내 SOTO 불가. Own-flight만"},
+  {code:"ET",route:"인천 출발 - ET 취항지",bsp:"5%",overEY:"3%",overBZ:"",ticketing:"2025.05.13~2026.06.30",departure:"",notes:"C-Class, Y-Class. 상용운임 제외. 기본컴+3% 추가. 유아 적용 가능"},
+  {code:"LO",route:"인천 출발-7개 유럽 노선",bsp:"0%",overEY:"2%",overBZ:"",ticketing:"2025.06.16~2025.07.15",departure:"2025.06.16~2025.12.31(제외9/26~10/10)",notes:"PRG/BER/BUD/LHR/CDG/VNO/TLL. 유아 불가"},
+  {code:"LO",route:"인천출발-EU노선(WAW제외)",bsp:"0%",overEY:"EY2%/BZ3%",overBZ:"3%",ticketing:"2025.10.01~2025.11.23",departure:"2025.11.01~2026.03.31",notes:"EU전노선. WAW제외 폴란드(WRO 포함). 결합 시 낮은 커미션"},
+  {code:"LO",route:"인천출발/도착(현지출발SOTO포함)",bsp:"0%",overEY:"2%",overBZ:"",ticketing:"2026.02.25~2026.03.31",departure:"2026.02.25~2026.03.31",notes:"WRO/WAW 제외 전노선. 단순경유 포함 가능. SOTO/CHL 가능. 그룹/INF/상용 불가"},
+  {code:"LO",route:"인천출발-EU(WAW,WRO제외)",bsp:"0%",overEY:"2%",overBZ:"",ticketing:"2025.08.01~2025.08.15",departure:"2025.08.20~2025.10.31",notes:"인천 출/도착 가능. 소아 가능/유아 불가. 모든 CLS"},
+  {code:"LO",route:"한국출발-폴란드(WAW,WRO직항)",bsp:"0%",overEY:"1%",overBZ:"2%",ticketing:"2024.7.1~2024.8.31",departure:"",notes:"IT운임,CIP운임,재발행 불가. 080 Stock만. 노선결합시 낮은커미션"},
+  {code:"LO",route:"ICN-BUD/WRO",bsp:"0%",overEY:"1%",overBZ:"2%",ticketing:"2023.11.20~12.20",departure:"~2024.03.31",notes:"왕복 및 편도 운임"},
+  {code:"LO",route:"TO/FROM ICN-BUD,EU노선",bsp:"0%",overEY:"2%",overBZ:"",ticketing:"2024.3.18~4.30",departure:"2024.3.18~9.30",notes:"최초 발권시만. 재발행 불가. LO Flight/080 STOCK ONLY. INF 불가"},
+  {code:"JL",route:"미주",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"~2023.8.10",departure:"",notes:"HAWAII 제외 미주 전노선"},
+  {code:"JL",route:"한일/유럽/대양주/동남아/하와이",bsp:"0%",overEY:"5%",overBZ:"7%",ticketing:"2022.10.11~2023.06.30",departure:"~2023.6.30",notes:"한일: 코드쉐어 시 미지급. 이원구간: 일본출도착 JL시 지급"},
+  {code:"JL",route:"전노선(북미/중남미 제외)",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"~2022.10.10",departure:"",notes:"전자계약(Docusign). 담당자 황인교님"},
+  {code:"MH",route:"한국출발 (EY 3%)",bsp:"0%",overEY:"3%",overBZ:"2%",ticketing:"EY:2025.09.15~2026.12.31 / BZ:2026.03.03~03.31",departure:"EY:2025.09.15~ / BZ:2026.03.03~06.30",notes:"한국발 MH 운항노선. SOTO 불가. 커미션 3% 수동입력"},
+  {code:"MH",route:"인천출발-이원구간(호주/NZ/인도/동남아)",bsp:"3%",overEY:"3%",overBZ:"",ticketing:"2024.2.5~3.5",departure:"2024.2.5~",notes:"인천발 KR끝 운임. RBD O 제외"},
+  {code:"MH",route:"전노선",bsp:"3%",overEY:"3%",overBZ:"",ticketing:"2023.8.2~8.31",departure:"2023.8.2~12.31",notes:"인천발 KR운임. 정규운임만. 투어코드KRMH6"},
+  {code:"MH",route:"전노선",bsp:"3%",overEY:"3%",overBZ:"",ticketing:"2023.5.1~7.31",departure:"",notes:"인천발 총6컴. 특가:투어코드X. 그외:KRMH6 필수"},
+  {code:"BI",route:"인천출발-전노선",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"~2023.6.30",departure:"",notes:"인천 출발"},
+  {code:"QR",route:"유럽,미주,카타르",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"2022.01.18~2022.03.31",departure:"2022.02.01~03.31",notes:"발권시 징수 X / BSP BILLING 반영"},
+  {code:"TK",route:"유럽",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"2022.05.01~2022.10.31",departure:"2022.05.01~2023.03.31",notes:"메일(계약서), 담당자 강경문님"},
+  {code:"HB",route:"SEL-HKG",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"2023.12.01~12.31",departure:"",notes:"RBD: Y,B,K,L,M,V,S,Q. Tour Code: KR201EE0002"},
+  {code:"GS",route:"SEL-TSN",bsp:"0%",overEY:"10%",overBZ:"",ticketing:"2024.1.1~3.31",departure:"2024.1.1~6.30",notes:"투어코드:INTJW2401"},
+  {code:"GS",route:"SEL-TSN 편도,왕복,경유 포함",bsp:"0%",overEY:"10%",overBZ:"",ticketing:"2025.1.1-3.31",departure:"2025.1.1~6.30",notes:"투어코드:INTJW2501. 유아제외"},
+  {code:"HA",route:"ICN-Entire US(하와이 포함)",bsp:"0%",overEY:"7%",overBZ:"",ticketing:"~2025.12.31",departure:"2025.09.13~2026.04.21",notes:"인천발 RT/OW. HA460/459,HA860/859,HA872/871 중 1개 포함 필수"},
+  {code:"9G",route:"ICN-PQC",bsp:"0%",overEY:"3%",overBZ:"",ticketing:"2026.03.11~",departure:"",notes:"지정대리점 커미션. CHD/INF 적용. 재발행/SOTO/상용/그룹 미적용"},
+];
+
+// ============ NOTICES ============
+let notices = [
+  {id:1, title:"NH 어카운트 코드 변경", body:"26.4.1부 어카운트 코드 변경됨. 새 코드: 323032 (1A) / KRJ92 (1G). ~26.9.30까지 적용.", date:"2026-04-01", urgent:true, banner:true},
+  {id:2, title:"BR 오버컴 연장 안내", body:"BR 오버컴 26.6.30까지 연장 확정. 인천/김포/부산 출발 모든 온라인 목적지.", date:"2026-03-15", urgent:false, banner:false},
+];
+let nextNoticeId = 3;
+
+// ============ SLACK ============
+let slackWebhookUrl = '';
+
+// ============ AUTH ============
+const ALLOWED_DOMAIN = 'myrealtrip.com';
+let currentUser = null;
+let isAdmin = false;
+
+function handleLogin() {
+  // Dev mode bypass
+  isAdmin = true;
+  currentUser = {name:'관리자(Dev)', email:'dev@myrealtrip.com'};
+  document.getElementById('loginArea').innerHTML = '<span class="user-info"><strong>'+currentUser.name+'</strong></span>';
+  showToast('개발 모드 로그인');
+}
+
+// ============ HELPERS ============
+function getNum(v) {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string') { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+  return 0;
+}
+
+function isKEA(a) {
+  return a.notes && a.notes.includes('KE@A');
+}
+
+function isCurrentPeriod(ticketing) {
+  if (!ticketing) return false;
+  if (ticketing.includes('2026') || ticketing.includes('2027')) return true;
+  const parts = ticketing.split('~');
+  if (parts.length === 2) {
+    const end = parts[1].trim().replace(/\s/g,'');
+    if (end === '') return false;
+    const match = end.match(/(\d{4})\.?(\d{1,2})\.?(\d{1,2})?/);
+    if (match) {
+      const y = parseInt(match[1]);
+      const m = parseInt(match[2]) - 1;
+      const d = parseInt(match[3] || '28');
+      return new Date(y, m, d) >= TODAY;
+    }
+  }
+  return false;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+function copyAccountCode(code, btn) {
+  navigator.clipboard.writeText(code).then(() => {
+    btn.classList.add('copied');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg> 복사됨';
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> 복사';
+    }, 1500);
+  });
+}
+
+// ============ RENDER ============
+function renderStats() {
+  const total = airlines.length;
+  const hasBsp = airlines.filter(a => getNum(a.bsp) > 0).length;
+  const hasOver = airlines.filter(a => getNum(a.over) > 0).length;
+  const keaCount = airlines.filter(a => isKEA(a)).length;
+  document.getElementById('statsBar').innerHTML = `
+    <div class="stat-card"><div class="label">전체 항공사</div><div class="value">${total}</div></div>
+    <div class="stat-card"><div class="label">오버커미션</div><div class="value green">${hasOver}</div></div>
+    <div class="stat-card"><div class="label">BSP 커미션</div><div class="value blue">${hasBsp}</div></div>
+    <div class="stat-card"><div class="label">KE@A</div><div class="value purple">${keaCount}</div></div>
+  `;
+}
+
+function renderCards(filtered) {
+  const grid = document.getElementById('cardGrid');
+  if (filtered.length === 0) {
+    grid.innerHTML = '';
+    document.getElementById('emptyState').style.display = 'block';
+    return;
+  }
+  document.getElementById('emptyState').style.display = 'none';
+
+  grid.innerHTML = filtered.map(a => {
+    const bspNum = getNum(a.bsp);
+    const overNum = getNum(a.over);
+    const hasOvercom = overNum > 0;
+    const kea = isKEA(a);
+    const cardClass = kea ? 'kea' : (hasOvercom ? 'has-overcom' : (bspNum > 0 ? '' : 'no-com'));
+
+    const badges = [];
+    if (bspNum > 0) badges.push('<span class="badge bsp">BSP '+a.bsp+'%</span>');
+    if (hasOvercom) badges.push('<span class="badge over">오버컴 '+a.over+'%</span>');
+    if (kea) badges.push('<span class="badge kea">KE@A</span>');
+    if (bspNum === 0 && !hasOvercom && !kea) badges.push('<span class="badge expired">노컴</span>');
+
+    const sotoStr = a.soto === 0 ? '0%' : (typeof a.soto === 'string' ? a.soto : a.soto + '%');
+    const chdStr = a.chd === 0 ? '0%' : (typeof a.chd === 'string' ? a.chd : a.chd + '%');
+    const infStr = a.inf === 0 ? '0%' : (typeof a.inf === 'string' ? a.inf : a.inf + '%');
+
+    const notesHtml = a.notes ? '<div class="card-notes">'+a.notes+'</div>' : '';
+
+    const accountHtml = a.accountCode ? `
+      <div class="card-account">
+        <div><span class="account-label">Account Code</span> <span class="account-value">${a.accountCode}</span></div>
+        <button class="copy-btn" onclick="event.stopPropagation();copyAccountCode('${a.accountCode}',this)">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> 복사
+        </button>
+      </div>` : `
+      <div class="card-account">
+        <div><span class="account-label">Account Code</span> <span class="account-value" style="color:#cbd5e0;">미등록</span></div>
+      </div>`;
+
+    const hist = history.filter(h => h.code === a.code);
+    const historyHtml = hist.length > 0 ? `
+      <button class="history-toggle" onclick="event.stopPropagation();this.classList.toggle('open');this.nextElementSibling.classList.toggle('open');">
+        <span>커미션 히스토리 (${hist.length}건)</span>
+        <span class="arrow">&#9660;</span>
+      </button>
+      <div class="history-panel">
+        <table class="history-table">
+          <thead><tr><th>노선</th><th>BSP</th><th>오버컴</th><th>발권기간</th><th>출발기간</th><th>비고</th></tr></thead>
+          <tbody>
+            ${hist.map(h => `
+              <tr class="${isCurrentPeriod(h.ticketing) ? 'is-current' : ''}">
+                <td class="route">${h.route}</td>
+                <td>${h.bsp || '-'}</td>
+                <td>${h.overEY || '-'}${h.overBZ ? ' / BZ:'+h.overBZ : ''}</td>
+                <td class="period">${h.ticketing || '-'}</td>
+                <td class="period">${h.departure || '-'}</td>
+                <td class="note-cell">${h.notes || '-'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    ` : '';
+
+    return `
+      <div class="airline-card ${cardClass}">
+        <div class="card-header">
+          <span class="airline-code">${a.code}</span>
+          <div class="airline-badges">${badges.join('')}</div>
+        </div>
+        <div class="card-rates">
+          <div class="rate-item"><div class="rate-label">BSP컴</div><div class="rate-value ${bspNum > 0 ? 'highlight' : 'zero'}">${a.bsp}%</div></div>
+          <div class="rate-item"><div class="rate-label">오버컴</div><div class="rate-value ${overNum > 0 ? 'highlight' : 'zero'}">${a.over}%</div></div>
+          <div class="rate-item"><div class="rate-label">SOTO</div><div class="rate-value ${getNum(a.soto) > 0 ? 'highlight' : 'zero'}">${sotoStr}</div></div>
+        </div>
+        <div class="card-details">
+          <div class="detail-row">
+            <div class="detail-tag">재발행 <span>${a.reissue}%</span></div>
+            <div class="detail-tag">소아 <span>${chdStr}</span></div>
+            <div class="detail-tag">유아 <span>${infStr}</span></div>
+          </div>
+        </div>
+        ${notesHtml}
+        ${accountHtml}
+        ${historyHtml}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderListView(filtered) {
+  const lv = document.getElementById('listView');
+  lv.innerHTML = `
+    <table class="list-table">
+      <thead>
+        <tr>
+          <th>항공사</th><th>BSP컴</th><th>오버컴</th><th>SOTO</th><th>재발행</th><th>소아</th><th>유아</th><th>Account Code</th><th>비고</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${filtered.map(a => {
+          const bspNum = getNum(a.bsp);
+          const overNum = getNum(a.over);
+          const kea = isKEA(a);
+          return `<tr>
+            <td style="font-weight:800;font-size:15px;">${a.code}${kea ? ' <span class="badge kea" style="font-size:10px;">KE@A</span>' : ''}</td>
+            <td class="com-cell ${bspNum > 0 ? 'has-value' : 'no-value'}">${a.bsp}%</td>
+            <td class="com-cell ${overNum > 0 ? 'has-value' : 'no-value'}">${a.over}%</td>
+            <td class="com-cell">${typeof a.soto === 'string' ? a.soto : a.soto + '%'}</td>
+            <td class="com-cell">${a.reissue}%</td>
+            <td class="com-cell">${typeof a.chd === 'string' ? a.chd : a.chd + '%'}</td>
+            <td class="com-cell">${typeof a.inf === 'string' ? a.inf : a.inf + '%'}</td>
+            <td class="acct-cell">${a.accountCode ? '<span style="cursor:pointer" onclick="copyAccountCode(\''+a.accountCode+'\',this);showToast(\'복사됨\')">'+a.accountCode+' &#128203;</span>' : '<span style="color:#cbd5e0">-</span>'}</td>
+            <td style="font-size:12px;max-width:300px;color:#4a5568;">${a.notes || '-'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ============ NOTICES ============
+function renderNotices() {
+  const list = document.getElementById('noticeList');
+  const badge = document.getElementById('noticeBadge');
+  const banner = document.getElementById('noticeBanner');
+  const bannerText = document.getElementById('bannerText');
+
+  if (notices.length === 0) {
+    list.innerHTML = '<div class="notice-empty">공지사항이 없습니다</div>';
+    badge.style.display = 'none';
+  } else {
+    badge.style.display = 'flex';
+    badge.textContent = notices.length;
+    list.innerHTML = notices.map(n => `
+      <div class="notice-item ${n.urgent ? 'urgent' : ''}">
+        <div class="notice-title">${n.urgent ? '&#128680; ' : ''}${n.title}</div>
+        <div class="notice-body">${n.body}</div>
+        <div class="notice-date">${n.date}</div>
+      </div>
+    `).join('');
+  }
+
+  // Show banner for first banner-flagged notice
+  const bannerNotice = notices.find(n => n.banner);
+  if (bannerNotice) {
+    bannerText.textContent = bannerNotice.title + ' - ' + bannerNotice.body;
+    banner.classList.remove('hidden');
+  }
+}
+
+function renderAdminNotices() {
+  const list = document.getElementById('adminNoticeList');
+  if (!list) return;
+  list.innerHTML = notices.map(n => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:6px;${n.urgent?'border-left:3px solid #e53e3e':''}">
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:600;">${n.title}</div>
+        <div style="font-size:12px;color:#4a5568;">${n.body}</div>
+      </div>
+      <span style="font-size:11px;color:#a0aec0;">${n.date}</span>
+      <button onclick="removeNotice(${n.id})" style="border:none;background:none;color:#e53e3e;cursor:pointer;font-size:16px;">&times;</button>
+    </div>
+  `).join('');
+}
+
+function addNotice() {
+  const title = document.getElementById('noticeTitle').value.trim();
+  const body = document.getElementById('noticeBody').value.trim();
+  const urgent = document.getElementById('noticeUrgent').checked;
+  const isBanner = document.getElementById('noticeBanner').checked;
+  if (!title) return;
+  notices.unshift({id:nextNoticeId++, title, body, date:new Date().toISOString().slice(0,10), urgent, banner:isBanner});
+  document.getElementById('noticeTitle').value = '';
+  document.getElementById('noticeBody').value = '';
+  document.getElementById('noticeUrgent').checked = false;
+  document.getElementById('noticeBanner').checked = false;
+  renderNotices();
+  renderAdminNotices();
+  showToast('공지사항이 추가되었습니다');
+
+  // Send Slack notification if webhook is set
+  if (slackWebhookUrl) {
+    sendSlackNotification('📢 공지사항: ' + title + '\n' + body);
+  }
+}
+
+function removeNotice(id) {
+  notices = notices.filter(n => n.id !== id);
+  renderNotices();
+  renderAdminNotices();
+  showToast('공지사항이 삭제되었습니다');
+}
+
+function toggleNoticeDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('noticeDropdown').classList.toggle('show');
+}
+
+document.addEventListener('click', () => {
+  document.getElementById('noticeDropdown').classList.remove('show');
+});
+
+// ============ SLACK INTEGRATION ============
+function saveSlackWebhook() {
+  slackWebhookUrl = document.getElementById('slackWebhook').value.trim();
+  showToast('Slack Webhook URL이 저장되었습니다');
+}
+
+function sendSlackNotification(message) {
+  if (!slackWebhookUrl) return;
+  // Note: Direct webhook calls from browser are blocked by CORS.
+  // In production, route through a server-side proxy or use Slack API.
+  // This is a placeholder for the integration.
+  console.log('[Slack Notification]', message, '-> URL:', slackWebhookUrl);
+  // fetch(slackWebhookUrl, {method:'POST', body:JSON.stringify({text:message})}).catch(e => console.log('Slack error:', e));
+}
+
+function testSlackNotification() {
+  if (!slackWebhookUrl) {
+    showToast('먼저 Webhook URL을 입력하세요');
+    return;
+  }
+  sendSlackNotification('🔔 테스트 알림: 커미션 대시보드 Slack 연동이 정상적으로 설정되었습니다.');
+  showToast('테스트 알림이 발송되었습니다 (콘솔 확인)');
+}
+
+// ============ FILTER & SEARCH ============
+let currentFilter = 'all';
+let currentSearch = '';
+let currentView = 'card';
+
+function getFiltered() {
+  let list = airlines;
+  if (currentSearch) {
+    const q = currentSearch.toUpperCase();
+    list = list.filter(a => a.code.toUpperCase().includes(q));
+  }
+  if (currentFilter === 'has-bsp') list = list.filter(a => getNum(a.bsp) > 0);
+  if (currentFilter === 'has-over') list = list.filter(a => getNum(a.over) > 0);
+  if (currentFilter === 'kea') list = list.filter(a => isKEA(a));
+  return list;
+}
+
+function refresh() {
+  const filtered = getFiltered();
+  renderCards(filtered);
+  renderListView(filtered);
+
+  if (currentView === 'card') {
+    document.getElementById('cardGrid').classList.add('active');
+    document.getElementById('listView').classList.remove('active');
+  } else {
+    document.getElementById('cardGrid').classList.remove('active');
+    document.getElementById('listView').classList.add('active');
+  }
+}
+
+// ============ ROUTING ============
+function route() {
+  const hash = location.hash || '#list';
+  document.getElementById('listPage').style.display = 'none';
+  document.getElementById('adminPage').style.display = 'none';
+
+  document.querySelectorAll('.header-nav a').forEach(a => a.classList.remove('active'));
+
+  if (hash === '#admin') {
+    document.getElementById('adminPage').style.display = 'block';
+    document.querySelector('.header-nav a[href="#admin"]').classList.add('active');
+    renderAdminNotices();
+  } else {
+    document.getElementById('listPage').style.display = 'block';
+    document.querySelector('.header-nav a[href="#list"]').classList.add('active');
+  }
+}
+
+// ============ EVENT LISTENERS ============
+document.getElementById('searchInput').addEventListener('input', e => {
+  currentSearch = e.target.value.trim();
+  refresh();
+});
+
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    refresh();
+  });
+});
+
+document.querySelectorAll('.view-toggle button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.view-toggle button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentView = btn.dataset.view;
+    refresh();
+  });
+});
+
+window.addEventListener('hashchange', route);
+
+// ============ INIT ============
+renderStats();
+renderNotices();
+refresh();
+route();
+</script>
+</body>
+</html>
