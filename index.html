@@ -166,10 +166,10 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
 <div id="loginScreen">
   <div class="login-card">
     <div class="brand">MyRealTrip</div>
-    <h1>항공사업팀 대시보드</h1>
-    <p class="sub">마이리얼트립 Google 계정으로 로그인해 주세요</p>
+    <h1>항공커미션 대시보드</h1>
+    <p class="sub">myrealtrip.com 혹은 aicx.kr 계정만 로그인 가능합니다</p>
     <div class="g-btn-wrap" id="googleBtnWrapper"></div>
-    <p class="restrict">마이리얼트립 항공사업팀 전용 (@myrealtrip.com)</p>
+    <p class="restrict">@myrealtrip.com / @aicx.kr 전용</p>
   </div>
 </div>
 
@@ -248,19 +248,19 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
 const SHEET_ID='12qqW-NFFxbcvQa_whjoe2LRseCTVwWcLt07AvJzxcVs';
 const SHEET_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=0#gid=0`;
 const CLIENT_ID='396719596652-g0ipsj01avpaaufoad7pj169s1doicia.apps.googleusercontent.com';
-const ALLOWED_DOMAIN='myrealtrip.com';
+const ALLOWED_DOMAINS=['myrealtrip.com','aicx.kr'];
 
 let airlines=[],historyData=[],currentUser=null,isAdmin=false,currentFilter='all',currentSearch='';
 
 // AUTH
 function initGoogleAuth(){
   if(typeof google==='undefined'||!google.accounts||!google.accounts.id){setTimeout(initGoogleAuth,100);return;}
-  google.accounts.id.initialize({client_id:CLIENT_ID,callback:handleCred,auto_select:false,hosted_domain:ALLOWED_DOMAIN});
+  google.accounts.id.initialize({client_id:CLIENT_ID,callback:handleCred,auto_select:false});
   google.accounts.id.renderButton(document.getElementById('googleBtnWrapper'),{theme:'outline',size:'large',text:'signin_with',width:280,shape:'rectangular'});
 }
 function handleCred(r){
   const p=JSON.parse(atob(r.credential.split('.')[1]));
-  if(!p.email.endsWith('@'+ALLOWED_DOMAIN)){showToast('@myrealtrip.com 계정만 가능','error');return;}
+  if(!ALLOWED_DOMAINS.some(d=>p.email.endsWith('@'+d))){showToast('@myrealtrip.com 또는 @aicx.kr 계정만 가능','error');return;}
   currentUser={name:p.name,email:p.email};
   isAdmin=true;
   document.getElementById('loginScreen').style.display='none';
