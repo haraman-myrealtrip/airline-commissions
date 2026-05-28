@@ -646,7 +646,7 @@ function loadEmbeddedData(){
     {code:"LO",bsp:"0",over:"2",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"EU노선 오버컴",images:[]},
     {code:"LX",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
     {code:"LY",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"COM@A",images:[]},
-    {code:"MH",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
+    {code:"MH",bsp:"0",over:"3",soto:"0",reissue:"0",chd:"3",inf:"0",notes:"한일노선 오버컴 3% (EY ~26.12.31). SOTO 불가. 3% 수동입력",images:[]},
     {code:"MU",bsp:"3",over:"0",soto:"0",reissue:"0",chd:"3",inf:"0",notes:"FM/MU만. 중국노선 3컴 유지",images:[]},
     {code:"NH",bsp:"0",over:"7",soto:"0",reissue:"0",chd:"7",inf:"7",notes:"한일노선만 오버컴 7%. ~26.9.30",images:[]},
     {code:"NX",bsp:"2",over:"0",soto:"2",reissue:"0",chd:"2",inf:"2",notes:"",images:[]},
@@ -749,8 +749,11 @@ function copyAccountCode(val,btn){navigator.clipboard.writeText(val).then(()=>{b
 
 // RENDER: STATS
 function renderStats(){
-  const t=airlines.length,hb=airlines.filter(a=>gn(a.bsp)>0).length,ho=airlines.filter(a=>gn(a.over)>0).length,nc=airlines.filter(a=>gn(a.bsp)===0&&gn(a.over)===0).length;
-  document.getElementById('statsBar').innerHTML=`<div class="st"><div class="lb">전체 항공사</div><div class="vl">${t}</div></div><div class="st"><div class="lb">BSP 커미션</div><div class="vl bl">${hb}</div></div><div class="st"><div class="lb">오버커미션</div><div class="vl gn">${ho}</div></div><div class="st"><div class="lb">노커미션</div><div class="vl or">${nc}</div></div>`;
+  const t=airlines.length;
+  const ho=airlines.filter(a=>gn(a.over)>0).length;
+  const hb=airlines.filter(a=>gn(a.bsp)>0&&gn(a.over)===0).length; // BSP만 있는 항공사
+  const nc=airlines.filter(a=>gn(a.bsp)===0&&gn(a.over)===0).length;
+  document.getElementById('statsBar').innerHTML=`<div class="st"><div class="lb">전체 항공사</div><div class="vl">${t}</div></div><div class="st"><div class="lb">오버커미션</div><div class="vl gn">${ho}</div></div><div class="st"><div class="lb">BSP 커미션</div><div class="vl bl">${hb}</div></div><div class="st"><div class="lb">노커미션</div><div class="vl or">${nc}</div></div>`;
 }
 
 // RENDER: CARDS
@@ -884,7 +887,7 @@ function renderDetail(code){
         <div class="rate-box"><div class="rb-label">유아</div><div class="rb-value ${gn(a.inf)>0?'hi':'ze'}">${fmtRate(a.inf)}</div></div>
       </div>${acctHtml}${noteHtml}</div>
       <div class="info-card"><h3>발권 주의사항</h3><div style="font-size:13px;color:#555;line-height:1.8">
-        ${a.notes?a.notes.split(/[.\/]/).filter(s=>s.trim().length>3).map(s=>`<div style="padding:6px 0;border-bottom:1px solid #F3F3F3">${s.trim()}</div>`).join(''):'<p style="color:#AAA;text-align:center;padding:20px">등록된 주의사항이 없습니다</p>'}
+        ${a.notes?`<div style="font-size:13px;color:#555;line-height:1.9;white-space:pre-wrap">${a.notes}</div>`:'<p style="color:#AAA;text-align:center;padding:20px">등록된 주의사항이 없습니다</p>'}
       </div>${editBtn}</div>
     </div>
     ${histHtml}
