@@ -77,6 +77,11 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
 .acct-copy{padding:3px 10px;border:1px solid #0066FF;border-radius:5px;background:#fff;font-size:11px;color:#0066FF;cursor:pointer;white-space:nowrap}
 .acct-copy:hover{background:#E8F2FF}
 .acct-copy.copied{border-color:#00A86B;color:#00A86B;background:#E6F9F0}
+.card-acct-toggle{cursor:pointer;user-select:none}
+.card-acct-toggle:hover{background:#E0EEFF}
+.acct-arrow{color:#0066FF;font-size:11px;transition:transform 0.2s;display:inline-block}
+.card-acct-list .card-acct{border-top:none;padding-top:6px;padding-bottom:6px;background:#EAF3FF}
+.card-acct-list .card-acct:first-child{border-top:1px solid #D0E4FF}
 .empty{text-align:center;padding:60px;color:#AAA;font-size:14px}
 
 /* DETAIL PAGE */
@@ -716,17 +721,34 @@ function loadEmbeddedData(){
 // RENDER HELPERS
 function gn(v){return parseFloat(String(v).replace(/[^0-9.]/g,''))||0;}
 
+function toggleAcctCard(id, btn) {
+  const el = document.getElementById(id);
+  const arrow = btn.querySelector('.acct-arrow');
+  const collapsed = el.style.display === 'none';
+  el.style.display = collapsed ? 'block' : 'none';
+  if (arrow) arrow.style.transform = collapsed ? 'rotate(180deg)' : '';
+}
+
 function renderAccountCodeCard(acct, code) {
   const parts = acct.includes(' / ') ? acct.split(' / ') : [acct];
   if (parts.length === 1) {
-    return `<div class="card-acct"><span class="acct-label">Account Code</span><span class="acct-val">${acct}</span><button class="acct-copy" onclick="event.stopPropagation();copyAccountCode('${acct.replace(/'/g,"\\'")}',this)">복사</button></div>`;
+    const colonIdx = acct.indexOf(':');
+    const val = colonIdx > -1 ? acct.substring(colonIdx + 1).trim() : acct.trim();
+    return `<div class="card-acct"><span class="acct-label">Account Code</span><span class="acct-val">${val}</span><button class="acct-copy" onclick="event.stopPropagation();copyAccountCode('${val.replace(/'/g,"\\'")}',this)">복사</button></div>`;
   }
-  return parts.map(p => {
+  const id = 'acct-' + code.replace(/[^a-z0-9]/gi, '') + '-' + Date.now();
+  const items = parts.map(p => {
     const colonIdx = p.indexOf(':');
     const label = colonIdx > -1 ? p.substring(0, colonIdx).trim() : 'Code';
     const val = colonIdx > -1 ? p.substring(colonIdx + 1).trim() : p.trim();
     return `<div class="card-acct"><span class="acct-label">${label}</span><span class="acct-val">${val}</span><button class="acct-copy" onclick="event.stopPropagation();copyAccountCode('${val.replace(/'/g,"\\'")}',this)">복사</button></div>`;
   }).join('');
+  return `<div class="card-acct card-acct-toggle" onclick="event.stopPropagation();toggleAcctCard('${id}',this)">
+    <span class="acct-label">Account Code</span>
+    <span style="flex:1;font-size:11px;color:#0066FF;font-weight:600">${parts.length}개 등록됨</span>
+    <span class="acct-arrow">▾</span>
+  </div>
+  <div id="${id}" class="card-acct-list" style="display:none">${items}</div>`;
 }
 
 function renderAccountCodeDetail(acct) {
