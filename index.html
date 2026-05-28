@@ -71,6 +71,12 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
 .tag b{font-weight:600}
 .card-note{padding:8px 16px;background:#FFFBEB;border-top:1px solid #FEF3C7;font-size:11px;color:#92400E;line-height:1.5;max-height:42px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .card-arrow{padding:8px 16px;background:#F7F8FA;border-top:1px solid #E8EAED;font-size:11px;color:#0066FF;font-weight:500;text-align:center}
+.card-acct{display:flex;align-items:center;gap:8px;padding:8px 16px;background:#F0F7FF;border-top:1px solid #D0E4FF}
+.card-acct .acct-label{font-size:10px;color:#0066FF;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;white-space:nowrap}
+.card-acct .acct-val{font-size:12px;font-weight:600;color:#1B2A4A;font-family:'Courier New',monospace;flex:1}
+.acct-copy{padding:3px 10px;border:1px solid #0066FF;border-radius:5px;background:#fff;font-size:11px;color:#0066FF;cursor:pointer;white-space:nowrap}
+.acct-copy:hover{background:#E8F2FF}
+.acct-copy.copied{border-color:#00A86B;color:#00A86B;background:#E6F9F0}
 .empty{text-align:center;padding:60px;color:#AAA;font-size:14px}
 
 /* DETAIL PAGE */
@@ -384,8 +390,8 @@ function loadEmbeddedData(){
     {code:"BR",route:"한국 출발(인천/김포/부산)",bsp:"5%",overEY:"3%",overBZ:"",ticketing:"2025.02.01~2026.04.30",departure:"제한 없음",notes:"SOTO 3% 고정 지급. ICN/GMP/PUS 출발",b2g:false},
     {code:"CI",route:"전노선 (26.1~26.12)",bsp:"3%",overEY:"7%",overBZ:"",ticketing:"2025.08.01~2026.12.31",departure:"2026.01.01~2026.12.31",notes:"한국출발 All dest. CI스탁+OAL C/S도 가능",b2g:true},
     {code:"CI",route:"전노선 (~7.31)",bsp:"3%",overEY:"4%",overBZ:"",ticketing:"2025.02.10~2025.07.31",departure:"",notes:"",b2g:true},
-    {code:"UA",route:"미주,중남미,캐나다",bsp:"0%",overEY:"4%",overBZ:"",ticketing:"2025.07.03~2026.09.30",departure:"운임규정별",notes:"투어코드934EU. BASIC ECO 불가",b2g:true},
-    {code:"NH",route:"한국출발-일본",bsp:"0%",overEY:"7%",overBZ:"",ticketing:"2025.10.01~2026.09.30",departure:"2025.10.01~2027.09.30",notes:"투어코드PP6KRTOT01. P,L,K 제외",b2g:false},
+    {code:"UA",route:"미주,중남미,캐나다",bsp:"0%",overEY:"4%",overBZ:"",ticketing:"2025.07.03~2026.09.30",departure:"운임규정별",notes:"투어코드934EU. BASIC ECO 불가",b2g:true,accountCode:"KRQTT"},
+    {code:"NH",route:"한국출발-일본",bsp:"0%",overEY:"7%",overBZ:"",ticketing:"2025.10.01~2026.09.30",departure:"2025.10.01~2027.09.30",notes:"투어코드PP6KRTOT01. P,L,K 제외",b2g:false,accountCode:"1A: 323032 / 1G: KRJ92 / 1S: KRJ92"},
     {code:"NH",route:"한국출발-일본",bsp:"0%",overEY:"7%",overBZ:"",ticketing:"2025.04.01~2025.09.30",departure:"2025.04.01~2026.09.30",notes:"투어코드PP5KRTOT01",b2g:false},
     {code:"ET",route:"인천 출발-ET 취항지",bsp:"5%",overEY:"3%",overBZ:"",ticketing:"2025.05.13~2026.06.30",departure:"",notes:"C/Y-Class. 기본컴+3% 추가. 유아 가능",b2g:false},
     {code:"LA",route:"Long haul (LA Stock)",bsp:"0%",overEY:"EY3%/BZ5%",overBZ:"5%",ticketing:"2026.04.01~2026.06.30",departure:"2026.04.01~2027.06.30",notes:"J:5%/ODKRI89606. Y,W:3%/ODKRI89607",b2g:false},
@@ -405,6 +411,8 @@ function loadEmbeddedData(){
 function gn(v){return parseFloat(String(v).replace(/[^0-9.]/g,''))||0;}
 function fmtRate(v){const s=String(v);return s.includes('%')?s:s+'%';}
 function isActive(t){if(!t)return false;const m=t.match(/~\s*(\d{4})[\./]?(\d{1,2})[\./]?(\d{1,2})?/);if(m)return new Date(parseInt(m[1]),parseInt(m[2])-1,parseInt(m[3]||'28'))>=new Date();return t.includes('2026')||t.includes('2027');}
+function getAccountCode(code){const h=historyData.find(x=>x.code===code&&x.accountCode&&isActive(x.ticketing));return h?h.accountCode:null;}
+function copyAccountCode(val,btn){navigator.clipboard.writeText(val).then(()=>{btn.textContent='복사됨';btn.classList.add('copied');setTimeout(()=>{btn.textContent='복사';btn.classList.remove('copied');},1500);});}
 
 // RENDER: STATS
 function renderStats(){
@@ -431,7 +439,9 @@ function renderCards(){
     if(!bn&&!on)badges.push(`<span class="badge nocom">노컴</span>`);
     if(hist.some(h=>h.b2g))badges.push(`<span class="badge b2g">B2G</span>`);
     const noteSnip=a.notes?`<div class="card-note">${a.notes}</div>`:'';
-    return`<div class="card ${cls}" onclick="navigate('detail','${encodeURIComponent(a.code)}')"><div class="card-top"><span class="card-code">${a.code}</span><div class="badges">${badges.join('')}</div></div><div class="card-rates"><div class="rate"><div class="rl">BSP</div><div class="rv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</div></div><div class="rate"><div class="rl">오버컴</div><div class="rv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div><div class="rate"><div class="rl">SOTO</div><div class="rv ${gn(a.soto)>0?'hi':'ze'}">${fmtRate(a.soto)}</div></div></div><div class="card-tags"><div class="tag">재발행 <b>${fmtRate(a.reissue)}</b></div><div class="tag">소아 <b>${fmtRate(a.chd)}</b></div><div class="tag">유아 <b>${fmtRate(a.inf)}</b></div></div>${noteSnip}<div class="card-arrow">상세 보기 →</div></div>`;
+    const acct=getAccountCode(a.code);
+    const acctHtml=acct?`<div class="card-acct"><span class="acct-label">Account Code</span><span class="acct-val">${acct}</span><button class="acct-copy" onclick="event.stopPropagation();copyAccountCode('${acct}',this)">복사</button></div>`:'';
+    return`<div class="card ${cls}" onclick="navigate('detail','${encodeURIComponent(a.code)}')"><div class="card-top"><span class="card-code">${a.code}</span><div class="badges">${badges.join('')}</div></div><div class="card-rates"><div class="rate"><div class="rl">BSP</div><div class="rv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</div></div><div class="rate"><div class="rl">오버컴</div><div class="rv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div><div class="rate"><div class="rl">SOTO</div><div class="rv ${gn(a.soto)>0?'hi':'ze'}">${fmtRate(a.soto)}</div></div></div><div class="card-tags"><div class="tag">재발행 <b>${fmtRate(a.reissue)}</b></div><div class="tag">소아 <b>${fmtRate(a.chd)}</b></div><div class="tag">유아 <b>${fmtRate(a.inf)}</b></div></div>${noteSnip}${acctHtml}<div class="card-arrow">상세 보기 →</div></div>`;
   }).join('');
 }
 
@@ -446,6 +456,8 @@ function renderDetail(code){
   document.getElementById('detailBadges').innerHTML=badges.join('');
   const hist=historyData.filter(h=>h.code===code);
   const noteHtml=a.notes?`<div class="note-box">${a.notes}</div>`:'';
+  const acct=getAccountCode(a.code);
+  const acctHtml=acct?`<div style="display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 14px;background:#F0F7FF;border-radius:8px;border:1px solid #D0E4FF"><span style="font-size:11px;font-weight:700;color:#0066FF;text-transform:uppercase;letter-spacing:0.3px">Account Code</span><span style="font-family:'Courier New',monospace;font-size:13px;font-weight:600;color:#1B2A4A;flex:1">${acct}</span><button class="acct-copy" onclick="copyAccountCode('${acct}',this)">복사</button></div>`:'';
   const editBtn=isAdmin?`<button class="btn-secondary" onclick="navigate('admin');setTimeout(()=>{document.getElementById('adminAirlineSelect').value='${a.code}';loadAdminAirline('${a.code}')},100)" style="margin-left:auto;font-size:12px">수정하기</button>`:'';
   document.getElementById('detailContent').innerHTML=`
     <div class="detail-grid">
@@ -456,7 +468,7 @@ function renderDetail(code){
         <div class="rate-box"><div class="rb-label">재발행</div><div class="rb-value ${gn(a.reissue)>0?'hi':'ze'}">${fmtRate(a.reissue)}</div></div>
         <div class="rate-box"><div class="rb-label">소아</div><div class="rb-value ${gn(a.chd)>0?'hi':'ze'}">${fmtRate(a.chd)}</div></div>
         <div class="rate-box"><div class="rb-label">유아</div><div class="rb-value ${gn(a.inf)>0?'hi':'ze'}">${fmtRate(a.inf)}</div></div>
-      </div>${noteHtml}</div>
+      </div>${acctHtml}${noteHtml}</div>
       <div class="info-card"><h3>발권 주의사항</h3><div style="font-size:13px;color:#555;line-height:1.8">
         ${a.notes?a.notes.split(/[.\/]/).filter(s=>s.trim().length>3).map(s=>`<div style="padding:6px 0;border-bottom:1px solid #F3F3F3">${s.trim()}</div>`).join(''):'<p style="color:#AAA;text-align:center;padding:20px">등록된 주의사항이 없습니다</p>'}
       </div>${editBtn}</div>
