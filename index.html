@@ -150,9 +150,28 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
 .modal .modal-close{float:right;background:none;border:none;font-size:24px;cursor:pointer;color:#888}
 
 @media(max-width:768px){.detail-grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.history-edit-row{grid-template-columns:1fr}}
+
+/* LOGIN SCREEN */
+#loginScreen{position:fixed;inset:0;background:#1B2A4A;z-index:500;display:flex;align-items:center;justify-content:center}
+.login-card{background:#fff;border-radius:16px;padding:44px 48px;max-width:400px;width:90%;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,0.35)}
+.login-card .brand{font-size:11px;font-weight:700;color:#4D9EFF;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px}
+.login-card h1{font-size:22px;font-weight:700;color:#1B2A4A;margin-bottom:8px}
+.login-card .sub{font-size:13px;color:#888;margin-bottom:28px;line-height:1.6}
+.login-card .g-btn-wrap{display:flex;justify-content:center;margin-bottom:16px}
+.login-card .restrict{font-size:11px;color:#BBB}
 </style>
 </head>
 <body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="brand">MyRealTrip</div>
+    <h1>항공사업팀 대시보드</h1>
+    <p class="sub">마이리얼트립 Google 계정으로 로그인해 주세요</p>
+    <div class="g-btn-wrap" id="googleBtnWrapper"></div>
+    <p class="restrict">마이리얼트립 항공사업팀 전용 (@myrealtrip.com)</p>
+  </div>
+</div>
 
 <nav class="nav">
   <div class="logo">MyRealTrip <span>커미션</span></div>
@@ -234,32 +253,29 @@ const ALLOWED_DOMAIN='myrealtrip.com';
 let airlines=[],historyData=[],currentUser=null,isAdmin=false,currentFilter='all',currentSearch='';
 
 // AUTH
-let tokenClient=null;
 function initGoogleAuth(){
-  if(typeof google==='undefined'||!google.accounts||!google.accounts.oauth2){setTimeout(initGoogleAuth,100);return;}
-  tokenClient=google.accounts.oauth2.initTokenClient({
-    client_id:CLIENT_ID,
-    scope:'email profile',
-    hosted_domain:ALLOWED_DOMAIN,
-    callback:async(resp)=>{
-      if(resp.error){showToast('로그인 실패','error');return;}
-      const info=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+resp.access_token}}).then(r=>r.json());
-      if(!info.email.endsWith('@'+ALLOWED_DOMAIN)){showToast('@myrealtrip.com 계정만 가능','error');return;}
-      currentUser={name:info.name,email:info.email};
-      isAdmin=true;
-      updateAuthUI();
-      if(location.hash==='#admin')showAdminPanel();
-      showToast(info.name+'님 환영합니다','success');
-    }
-  });
+  if(typeof google==='undefined'||!google.accounts||!google.accounts.id){setTimeout(initGoogleAuth,100);return;}
+  google.accounts.id.initialize({client_id:CLIENT_ID,callback:handleCred,auto_select:false,hosted_domain:ALLOWED_DOMAIN});
+  google.accounts.id.renderButton(document.getElementById('googleBtnWrapper'),{theme:'outline',size:'large',text:'signin_with',width:280,shape:'rectangular'});
+}
+function handleCred(r){
+  const p=JSON.parse(atob(r.credential.split('.')[1]));
+  if(!p.email.endsWith('@'+ALLOWED_DOMAIN)){showToast('@myrealtrip.com 계정만 가능','error');return;}
+  currentUser={name:p.name,email:p.email};
+  isAdmin=true;
+  document.getElementById('loginScreen').style.display='none';
+  updateAuthUI();
+  if(location.hash==='#admin')showAdminPanel();
+  showToast(p.name+'님 환영합니다','success');
 }
 function googleLogin(){
-  if(!tokenClient){showToast('잠시 후 다시 시도하세요','error');return;}
-  tokenClient.requestAccessToken({prompt:'select_account'});
+  document.getElementById('loginScreen').style.display='flex';
 }
 function logout(){
-  if(currentUser)google.accounts.oauth2.revoke(currentUser.email,()=>{});
+  google.accounts.id.disableAutoSelect();
+  if(currentUser)google.accounts.id.revoke(currentUser.email,()=>{});
   currentUser=null;isAdmin=false;
+  document.getElementById('loginScreen').style.display='flex';
   updateAuthUI();
   if(location.hash==='#admin'){document.getElementById('adminLoginPrompt').style.display='block';document.getElementById('adminPanel').classList.remove('visible');}
 }
