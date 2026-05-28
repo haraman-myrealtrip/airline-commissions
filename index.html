@@ -831,7 +831,7 @@ function renderDetail(code){
   if(!bn&&!on)badges.push(`<span class="badge nocom">노컴</span>`);
   document.getElementById('detailBadges').innerHTML=badges.join('');
   const hist=historyData.filter(h=>h.code===code);
-  const noteHtml=a.notes?`<div class="note-box">${a.notes}</div>`:'';
+
   const acct=getAccountCode(a.code);
   const acctHtml=acct?renderAccountCodeDetail(acct):'';
   const editBtn=isAdmin?`<button class="btn-secondary" onclick="navigate('admin');setTimeout(()=>{document.getElementById('adminAirlineSelect').value='${a.code}';loadAdminAirline('${a.code}')},100)" style="margin-left:auto;font-size:12px">수정하기</button>`:'';
@@ -907,7 +907,7 @@ function renderDetail(code){
         <div class="rate-box"><div class="rb-label">재발행</div><div class="rb-value ${gn(a.reissue)>0?'hi':'ze'}">${fmtRate(a.reissue)}</div></div>
         <div class="rate-box"><div class="rb-label">소아</div><div class="rb-value ${gn(a.chd)>0?'hi':'ze'}">${fmtRate(a.chd)}</div></div>
         <div class="rate-box"><div class="rb-label">유아</div><div class="rb-value ${gn(a.inf)>0?'hi':'ze'}">${fmtRate(a.inf)}</div></div>
-      </div>${acctHtml}${noteHtml}</div>
+      </div>${acctHtml}</div>
       <div class="info-card"><h3>발권 주의사항</h3><div style="font-size:13px;color:#555;line-height:1.8">
         ${a.notes?`<div style="font-size:13px;color:#555;line-height:1.9;white-space:pre-wrap">${a.notes}</div>`:'<p style="color:#AAA;text-align:center;padding:20px">등록된 주의사항이 없습니다</p>'}
       </div>${editBtn}</div>
