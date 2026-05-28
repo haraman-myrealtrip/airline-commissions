@@ -137,7 +137,7 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
 .btn-primary{background:#0066FF;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
 .btn-primary:hover{background:#0052CC}
 .btn-secondary{background:#fff;color:#555;border:1.5px solid #D0D5DD;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer}
-.history-edit-row{display:grid;grid-template-columns:1.5fr 0.5fr 0.5fr 1fr 1fr 2fr 40px;gap:8px;align-items:start;margin-bottom:8px;padding:8px;background:#F8FAFC;border-radius:6px}
+.history-edit-row{display:grid;grid-template-columns:1.5fr 0.5fr 0.5fr 1fr 1fr 0.8fr 2fr 40px;gap:8px;align-items:start;margin-bottom:8px;padding:8px;background:#F8FAFC;border-radius:6px}
 .history-edit-row input,.history-edit-row textarea{padding:7px 10px;border:1px solid #D0D5DD;border-radius:5px;font-size:12px;font-family:inherit}
 .history-edit-row textarea{min-height:50px;resize:vertical}
 .btn-remove{background:none;border:none;color:#E53E3E;cursor:pointer;font-size:18px;padding:4px}
@@ -163,8 +163,10 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
 .login-card .brand{font-size:11px;font-weight:700;color:#4D9EFF;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px}
 .login-card h1{font-size:22px;font-weight:700;color:#1B2A4A;margin-bottom:8px}
 .login-card .sub{font-size:13px;color:#888;margin-bottom:28px;line-height:1.6}
-.login-card .g-btn-wrap{display:flex;justify-content:center;margin-bottom:16px}
 .login-card .restrict{font-size:11px;color:#BBB}
+.google-signin-btn{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px 24px;background:#fff;border:1.5px solid #D0D5DD;border-radius:8px;font-size:14px;font-weight:500;color:#3C4043;cursor:pointer;transition:all 0.2s;min-width:240px;margin:0 auto}
+.google-signin-btn:hover{background:#F8F9FA;border-color:#AAA;box-shadow:0 1px 4px rgba(0,0,0,0.1)}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -174,8 +176,11 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
     <div class="brand">MyRealTrip</div>
     <h1>항공커미션 대시보드</h1>
     <p class="sub">myrealtrip.com 혹은 aicx.kr 계정만 로그인 가능합니다</p>
-    <div class="g-btn-wrap" id="googleBtnWrapper"></div>
-    <p class="restrict">@myrealtrip.com / @aicx.kr 전용</p>
+    <button class="google-signin-btn" onclick="googleLogin()">
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Google 계정으로 로그인
+    </button>
+    <p class="restrict" style="margin-top:16px">@myrealtrip.com / @aicx.kr 전용</p>
   </div>
 </div>
 
@@ -255,32 +260,40 @@ const SHEET_ID='12qqW-NFFxbcvQa_whjoe2LRseCTVwWcLt07AvJzxcVs';
 const SHEET_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=0#gid=0`;
 const CLIENT_ID='396719596652-g0ipsj01avpaaufoad7pj169s1doicia.apps.googleusercontent.com';
 const ALLOWED_DOMAINS=['myrealtrip.com','aicx.kr'];
+const AUDIT_SHEET_NAME='변경이력';
 
 let airlines=[],historyData=[],currentUser=null,isAdmin=false,currentFilter='all',currentSearch='';
+let tokenClient=null,accessToken=null;
 
 // AUTH
 function initGoogleAuth(){
-  if(typeof google==='undefined'||!google.accounts||!google.accounts.id){setTimeout(initGoogleAuth,100);return;}
-  google.accounts.id.initialize({client_id:CLIENT_ID,callback:handleCred,auto_select:false});
-  google.accounts.id.renderButton(document.getElementById('googleBtnWrapper'),{theme:'outline',size:'large',text:'signin_with',width:280,shape:'rectangular'});
+  if(typeof google==='undefined'||!google.accounts||!google.accounts.oauth2){setTimeout(initGoogleAuth,100);return;}
+  tokenClient=google.accounts.oauth2.initTokenClient({
+    client_id:CLIENT_ID,
+    scope:'email profile https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file',
+    callback:handleToken
+  });
 }
-function handleCred(r){
-  const p=JSON.parse(atob(r.credential.split('.')[1]));
-  if(!ALLOWED_DOMAINS.some(d=>p.email.endsWith('@'+d))){showToast('@myrealtrip.com 또는 @aicx.kr 계정만 가능','error');return;}
-  currentUser={name:p.name,email:p.email};
+async function handleToken(resp){
+  if(resp.error){showToast('로그인 실패','error');return;}
+  accessToken=resp.access_token;
+  const info=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+accessToken}}).then(r=>r.json());
+  if(!ALLOWED_DOMAINS.some(d=>info.email.endsWith('@'+d))){showToast('@myrealtrip.com 또는 @aicx.kr 계정만 가능','error');accessToken=null;return;}
+  currentUser={name:info.name,email:info.email};
   isAdmin=true;
   document.getElementById('loginScreen').style.display='none';
   updateAuthUI();
+  await initAuditSheet();
   if(location.hash==='#admin')showAdminPanel();
-  showToast(p.name+'님 환영합니다','success');
+  showToast(info.name+'님 환영합니다','success');
 }
 function googleLogin(){
-  document.getElementById('loginScreen').style.display='flex';
+  if(!tokenClient){showToast('잠시 후 다시 시도하세요','error');return;}
+  tokenClient.requestAccessToken({prompt:'select_account'});
 }
 function logout(){
-  google.accounts.id.disableAutoSelect();
-  if(currentUser)google.accounts.id.revoke(currentUser.email,()=>{});
-  currentUser=null;isAdmin=false;
+  if(accessToken&&currentUser){google.accounts.oauth2.revoke(accessToken,()=>{});}
+  accessToken=null;currentUser=null;isAdmin=false;
   document.getElementById('loginScreen').style.display='flex';
   updateAuthUI();
   if(location.hash==='#admin'){document.getElementById('adminLoginPrompt').style.display='block';document.getElementById('adminPanel').classList.remove('visible');}
@@ -298,6 +311,84 @@ function handleRoute(){
   else{document.getElementById('page-list').classList.add('active');document.querySelectorAll('.nav-links a')[0].classList.add('active');}
 }
 window.addEventListener('hashchange',handleRoute);
+
+// SHEETS API HELPERS
+async function sheetsAppend(sheetName,values){
+  if(!accessToken)return;
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(sheetName+'!A1')}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,{method:'POST',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},body:JSON.stringify({values})}).catch(e=>console.error('sheetsAppend error:',e));
+}
+async function sheetsGetValues(range){
+  if(!accessToken)return null;
+  return fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`,{headers:{Authorization:'Bearer '+accessToken}}).then(r=>r.json()).catch(()=>null);
+}
+async function sheetsBatchUpdate(requests){
+  if(!accessToken)return;
+  return fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`,{method:'POST',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},body:JSON.stringify({requests})}).then(r=>r.json()).catch(e=>console.error('batchUpdate error:',e));
+}
+async function initAuditSheet(){
+  if(!accessToken)return;
+  try{
+    const meta=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`,{headers:{Authorization:'Bearer '+accessToken}}).then(r=>r.json());
+    const exists=(meta.sheets||[]).some(s=>s.properties.title===AUDIT_SHEET_NAME);
+    if(!exists){
+      await sheetsBatchUpdate([{addSheet:{properties:{title:AUDIT_SHEET_NAME,gridProperties:{rowCount:2000,columnCount:8}}}}]);
+      await sheetsAppend(AUDIT_SHEET_NAME,[['날짜/시간','변경자','이메일','항공사','변경항목','이전값','변경값']]);
+    }
+  }catch(e){console.error('initAuditSheet error:',e);}
+}
+async function appendAuditLog(code,field,before,after){
+  if(!accessToken||!currentUser)return;
+  const now=new Date().toLocaleString('ko-KR',{timeZone:'Asia/Seoul'});
+  await sheetsAppend(AUDIT_SHEET_NAME,[[now,currentUser.name,currentUser.email,code,field,String(before),String(after)]]);
+}
+async function loadAuditLog(code){
+  if(!accessToken)return[];
+  const data=await sheetsGetValues(AUDIT_SHEET_NAME+'!A:G');
+  if(!data||!data.values)return[];
+  const rows=data.values.slice(1);
+  return rows.filter(r=>r[3]===code).reverse();
+}
+
+// DRIVE FILE UPLOAD
+async function handleFileUpload(code,input){
+  const file=input.files[0];if(!file)return;
+  const prog=document.getElementById('uploadProgress');
+  prog.style.display='block';
+  try{
+    const uploaded=await uploadFileToDrive(file,code);
+    const a=airlines.find(x=>x.code===code);
+    if(!a.images)a.images=[];
+    a.images.push(uploaded);
+    appendAuditLog(code,'파일추가','-',uploaded.label);
+    renderDetail(code);
+    showToast('파일이 업로드되었습니다','success');
+  }catch(e){
+    console.error('Upload error:',e);
+    showToast('업로드 실패: '+e.message,'error');
+  }finally{
+    prog.style.display='none';
+    input.value='';
+  }
+}
+async function uploadFileToDrive(file,code){
+  if(!accessToken)throw new Error('로그인이 필요합니다');
+  const metadata={name:`[${code}] ${file.name}`};
+  const form=new FormData();
+  form.append('metadata',new Blob([JSON.stringify(metadata)],{type:'application/json'}));
+  form.append('file',file);
+  const res=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType',{method:'POST',headers:{Authorization:'Bearer '+accessToken},body:form}).then(r=>r.json());
+  if(!res.id)throw new Error(res.error?.message||'Upload failed');
+  await fetch(`https://www.googleapis.com/drive/v3/files/${res.id}/permissions`,{method:'POST',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},body:JSON.stringify({role:'reader',type:'anyone'})});
+  return{id:res.id,label:file.name,url:`https://drive.google.com/uc?id=${res.id}`,viewUrl:`https://drive.google.com/file/d/${res.id}/view`,mimeType:file.type};
+}
+function removeFile(code,idx){
+  const a=airlines.find(x=>x.code===code);if(!a||!a.images)return;
+  const removed=a.images[idx];
+  a.images.splice(idx,1);
+  if(removed)appendAuditLog(code,'파일삭제',removed.label,'-');
+  renderDetail(code);
+  showToast('파일이 삭제되었습니다');
+}
 
 // DATA
 function loadEmbeddedData(){
@@ -438,10 +529,9 @@ function renderCards(){
     if(on>0)badges.push(`<span class="badge over">오버컴 ${fmtRate(a.over)}</span>`);
     if(!bn&&!on)badges.push(`<span class="badge nocom">노컴</span>`);
     if(hist.some(h=>h.b2g))badges.push(`<span class="badge b2g">B2G</span>`);
-    const noteSnip=a.notes?`<div class="card-note">${a.notes}</div>`:'';
     const acct=getAccountCode(a.code);
     const acctHtml=acct?`<div class="card-acct"><span class="acct-label">Account Code</span><span class="acct-val">${acct}</span><button class="acct-copy" onclick="event.stopPropagation();copyAccountCode('${acct}',this)">복사</button></div>`:'';
-    return`<div class="card ${cls}" onclick="navigate('detail','${encodeURIComponent(a.code)}')"><div class="card-top"><span class="card-code">${a.code}</span><div class="badges">${badges.join('')}</div></div><div class="card-rates"><div class="rate"><div class="rl">BSP</div><div class="rv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</div></div><div class="rate"><div class="rl">오버컴</div><div class="rv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div><div class="rate"><div class="rl">SOTO</div><div class="rv ${gn(a.soto)>0?'hi':'ze'}">${fmtRate(a.soto)}</div></div></div><div class="card-tags"><div class="tag">재발행 <b>${fmtRate(a.reissue)}</b></div><div class="tag">소아 <b>${fmtRate(a.chd)}</b></div><div class="tag">유아 <b>${fmtRate(a.inf)}</b></div></div>${noteSnip}${acctHtml}<div class="card-arrow">상세 보기 →</div></div>`;
+    return`<div class="card ${cls}" onclick="navigate('detail','${encodeURIComponent(a.code)}')"><div class="card-top"><span class="card-code">${a.code}</span><div class="badges">${badges.join('')}</div></div><div class="card-rates"><div class="rate"><div class="rl">BSP</div><div class="rv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</div></div><div class="rate"><div class="rl">오버컴</div><div class="rv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div><div class="rate"><div class="rl">SOTO</div><div class="rv ${gn(a.soto)>0?'hi':'ze'}">${fmtRate(a.soto)}</div></div></div><div class="card-tags"><div class="tag">재발행 <b>${fmtRate(a.reissue)}</b></div><div class="tag">소아 <b>${fmtRate(a.chd)}</b></div><div class="tag">유아 <b>${fmtRate(a.inf)}</b></div></div>${acctHtml}<div class="card-arrow">상세 보기 →</div></div>`;
   }).join('');
 }
 
@@ -459,6 +549,69 @@ function renderDetail(code){
   const acct=getAccountCode(a.code);
   const acctHtml=acct?`<div style="display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 14px;background:#F0F7FF;border-radius:8px;border:1px solid #D0E4FF"><span style="font-size:11px;font-weight:700;color:#0066FF;text-transform:uppercase;letter-spacing:0.3px">Account Code</span><span style="font-family:'Courier New',monospace;font-size:13px;font-weight:600;color:#1B2A4A;flex:1">${acct}</span><button class="acct-copy" onclick="copyAccountCode('${acct}',this)">복사</button></div>`:'';
   const editBtn=isAdmin?`<button class="btn-secondary" onclick="navigate('admin');setTimeout(()=>{document.getElementById('adminAirlineSelect').value='${a.code}';loadAdminAirline('${a.code}')},100)" style="margin-left:auto;font-size:12px">수정하기</button>`:'';
+
+  const activeHist=hist.filter(h=>isActive(h.ticketing));
+  const expiredHist=hist.filter(h=>!isActive(h.ticketing));
+  const histHtml=`
+    <div class="history-section">
+      <h3 style="display:flex;justify-content:space-between">커미션 히스토리<span style="font-size:12px;font-weight:400;color:#888">${hist.length}건</span></h3>
+      ${activeHist.length?`
+        <div style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+            <span style="width:8px;height:8px;border-radius:50%;background:#00A86B;display:inline-block"></span>
+            <span style="font-size:11px;font-weight:700;color:#00A86B;text-transform:uppercase;letter-spacing:0.5px">현재 유효 (${activeHist.length}건)</span>
+          </div>
+          <table class="htbl"><thead><tr><th>노선</th><th>BSP</th><th>오버컴(EY)</th><th>오버컴(BZ)</th><th>발권기간</th><th>출발기간</th><th>Account Code</th><th>비고</th></tr></thead>
+          <tbody>${activeHist.map(h=>`<tr class="cur"><td class="rt">${h.b2g?'<span class="b2g-tag">B2G</span>':''}${h.route||'-'}</td><td>${h.bsp||'-'}</td><td>${h.overEY||'-'}</td><td>${h.overBZ||'-'}</td><td class="pr">${h.ticketing||'-'}</td><td class="pr">${h.departure||'-'}</td><td style="font-family:monospace;font-size:11px">${h.accountCode||'-'}</td><td class="nc">${h.notes||'-'}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>`:''}
+      ${expiredHist.length?`
+        <details>
+          <summary style="cursor:pointer;font-size:11px;font-weight:700;color:#AAA;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;list-style:none;display:flex;align-items:center;gap:6px">
+            <span style="width:8px;height:8px;border-radius:50%;background:#CCC;display:inline-block"></span>
+            만료된 히스토리 (${expiredHist.length}건) ▾
+          </summary>
+          <table class="htbl" style="opacity:0.7"><thead><tr><th>노선</th><th>BSP</th><th>오버컴(EY)</th><th>오버컴(BZ)</th><th>발권기간</th><th>출발기간</th><th>Account Code</th><th>비고</th></tr></thead>
+          <tbody>${expiredHist.map(h=>`<tr><td class="rt">${h.b2g?'<span class="b2g-tag">B2G</span>':''}${h.route||'-'}</td><td>${h.bsp||'-'}</td><td>${h.overEY||'-'}</td><td>${h.overBZ||'-'}</td><td class="pr">${h.ticketing||'-'}</td><td class="pr">${h.departure||'-'}</td><td style="font-family:monospace;font-size:11px">${h.accountCode||'-'}</td><td class="nc">${h.notes||'-'}</td></tr>`).join('')}</tbody>
+          </table>
+        </details>`:''}
+      ${!hist.length?'<p style="color:#AAA;text-align:center;padding:30px">히스토리가 없습니다</p>':''}
+    </div>`;
+
+  const archiveHtml=`
+    <div class="archive-section">
+      <h3 style="display:flex;justify-content:space-between">
+        아카이빙 자료
+        ${isAdmin?`<label style="cursor:pointer;font-size:11px;color:#0066FF;font-weight:500;display:flex;align-items:center;gap:4px">
+          <input type="file" id="fileUploadInput" accept=".jpg,.jpeg,.png,.pdf" style="display:none" onchange="handleFileUpload('${a.code}',this)">
+          + 파일 추가 (JPG/PDF)
+        </label>`:''}
+      </h3>
+      <div id="archiveFilesGrid" class="img-grid">
+        ${(a.images&&a.images.length)?a.images.map((img,i)=>`
+          <div class="img-item" style="position:relative">
+            ${img.mimeType&&img.mimeType.includes('pdf')?
+              `<div style="height:120px;background:#FFF5F5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px">
+                 <span style="font-size:32px">📄</span>
+                 <span style="font-size:10px;color:#888">PDF</span>
+               </div>`:
+              `<img src="${img.url}" alt="${img.label}" style="width:100%;height:120px;object-fit:cover" onclick="openImgModal('${img.url}','${img.label}')">`
+            }
+            <div class="img-label" style="display:flex;align-items:center;gap:4px">
+              <a href="${img.viewUrl||img.url}" target="_blank" style="flex:1;color:#0066FF;text-decoration:none;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${img.label}</a>
+              ${isAdmin?`<button onclick="removeFile('${a.code}',${i})" style="background:none;border:none;color:#E53E3E;cursor:pointer;font-size:14px;padding:0">×</button>`:''}
+            </div>
+          </div>`).join(''):
+          `<div style="grid-column:1/-1;color:#AAA;font-size:13px;text-align:center;padding:30px">
+             ${isAdmin?'위 "+ 파일 추가" 버튼으로 JPG 또는 PDF를 업로드하세요':'등록된 아카이빙 자료가 없습니다'}
+           </div>`}
+      </div>
+      <div id="uploadProgress" style="display:none;text-align:center;padding:16px;color:#0066FF;font-size:13px">
+        <span style="display:inline-block;width:16px;height:16px;border:2px solid #ccc;border-top-color:#0066FF;border-radius:50%;animation:spin 0.8s linear infinite;margin-right:8px;vertical-align:middle"></span>
+        업로드 중...
+      </div>
+    </div>`;
+
   document.getElementById('detailContent').innerHTML=`
     <div class="detail-grid">
       <div class="info-card"><h3>커미션율 요약</h3><div class="rate-grid">
@@ -473,12 +626,34 @@ function renderDetail(code){
         ${a.notes?a.notes.split(/[.\/]/).filter(s=>s.trim().length>3).map(s=>`<div style="padding:6px 0;border-bottom:1px solid #F3F3F3">${s.trim()}</div>`).join(''):'<p style="color:#AAA;text-align:center;padding:20px">등록된 주의사항이 없습니다</p>'}
       </div>${editBtn}</div>
     </div>
-    <div class="history-section"><h3 style="display:flex;justify-content:space-between">커미션 히스토리<span style="font-size:12px;font-weight:400;color:#888">${hist.length}건</span></h3>
-      ${hist.length?`<table class="htbl"><thead><tr><th>노선</th><th>BSP</th><th>오버컴(EY)</th><th>오버컴(BZ)</th><th>발권기간</th><th>출발기간</th><th>비고</th></tr></thead><tbody>${hist.map(h=>`<tr class="${isActive(h.ticketing)?'cur':''}"><td class="rt">${h.b2g?'<span class="b2g-tag">B2G</span>':''}${h.route||'-'}</td><td>${h.bsp||'-'}</td><td>${h.overEY||'-'}</td><td>${h.overBZ||'-'}</td><td class="pr">${h.ticketing||'-'}</td><td class="pr">${h.departure||'-'}</td><td class="nc">${h.notes||'-'}</td></tr>`).join('')}</tbody></table>`:'<p style="color:#AAA;text-align:center;padding:30px">히스토리가 없습니다</p>'}
-    </div>
-    <div class="archive-section"><h3 style="display:flex;justify-content:space-between">아카이빙 자료<span style="font-size:12px;font-weight:400;color:#888">이미지/문서</span></h3>
-      <div class="img-grid">${(a.images&&a.images.length)?a.images.map(img=>`<div class="img-item" onclick="openImgModal('${img.url}','${img.label}')"><img src="${img.url}" alt="${img.label}"><div class="img-label">${img.label}</div></div>`).join(''):'<div class="no-images">등록된 아카이빙 자료가 없습니다.<br><span style="font-size:11px;color:#CCC;display:block;margin-top:4px">관리자 페이지에서 Google Drive 이미지 링크를 추가하세요</span></div>'}</div>
-    </div>`;
+    ${histHtml}
+    ${archiveHtml}
+    ${isAdmin?`
+    <div style="background:#fff;border:1px solid #E8EAED;border-radius:10px;padding:20px;margin-bottom:24px">
+      <h3 style="font-size:14px;font-weight:700;color:#1B2A4A;margin-bottom:14px;display:flex;align-items:center;gap:8px">
+        변경 이력
+        <span style="font-size:11px;font-weight:400;color:#888">관리자만 열람 가능</span>
+      </h3>
+      <div id="auditLogContent"><p style="color:#AAA;text-align:center;padding:20px;font-size:13px">로딩 중...</p></div>
+    </div>`:''}`;
+
+  if(isAdmin){
+    loadAuditLog(code).then(entries=>{
+      const el=document.getElementById('auditLogContent');
+      if(!el)return;
+      if(!entries.length){el.innerHTML='<p style="color:#AAA;text-align:center;padding:20px;font-size:13px">변경 이력이 없습니다</p>';return;}
+      el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead><tr style="background:#F7F8FA">
+          <th style="padding:8px 10px;text-align:left;font-weight:600;color:#555;border-bottom:1px solid #E8EAED">날짜/시간</th>
+          <th style="padding:8px 10px;text-align:left;font-weight:600;color:#555;border-bottom:1px solid #E8EAED">변경자</th>
+          <th style="padding:8px 10px;text-align:left;font-weight:600;color:#555;border-bottom:1px solid #E8EAED">변경항목</th>
+          <th style="padding:8px 10px;text-align:left;font-weight:600;color:#555;border-bottom:1px solid #E8EAED">이전값</th>
+          <th style="padding:8px 10px;text-align:left;font-weight:600;color:#555;border-bottom:1px solid #E8EAED">변경값</th>
+        </tr></thead>
+        <tbody>${entries.map(r=>`<tr><td style="padding:7px 10px;border-bottom:1px solid #F5F5F5">${r[0]||''}</td><td style="padding:7px 10px;border-bottom:1px solid #F5F5F5">${r[1]||''}<br><span style="color:#AAA;font-size:10px">${r[2]||''}</span></td><td style="padding:7px 10px;border-bottom:1px solid #F5F5F5;font-weight:600">${r[4]||''}</td><td style="padding:7px 10px;border-bottom:1px solid #F5F5F5;color:#E53E3E">${r[5]||''}</td><td style="padding:7px 10px;border-bottom:1px solid #F5F5F5;color:#00A86B">${r[6]||''}</td></tr>`).join('')}</tbody>
+      </table>`;
+    });
+  }
 }
 
 // ADMIN
@@ -506,21 +681,28 @@ function loadAdminAirline(code){
     </div>`;
 }
 
-function renderHistRow(h,i){return`<div class="history-edit-row" data-idx="${i}"><input value="${h.route||''}" placeholder="노선" data-field="route"><input value="${h.bsp||''}" placeholder="BSP" data-field="bsp"><input value="${h.overEY||''}" placeholder="오버컴" data-field="overEY"><input value="${h.ticketing||''}" placeholder="발권기간" data-field="ticketing"><input value="${h.departure||''}" placeholder="출발기간" data-field="departure"><textarea placeholder="비고" data-field="notes">${h.notes||''}</textarea><button class="btn-remove" onclick="removeHistRow(${i})">×</button></div>`;}
+function renderHistRow(h,i){return`<div class="history-edit-row" data-idx="${i}"><input value="${h.route||''}" placeholder="노선" data-field="route"><input value="${h.bsp||''}" placeholder="BSP" data-field="bsp"><input value="${h.overEY||''}" placeholder="오버컴" data-field="overEY"><input value="${h.ticketing||''}" placeholder="발권기간" data-field="ticketing"><input value="${h.departure||''}" placeholder="출발기간" data-field="departure"><input value="${h.accountCode||''}" placeholder="Account Code" data-field="accountCode" style="font-family:monospace"><textarea placeholder="비고" data-field="notes">${h.notes||''}</textarea><button class="btn-remove" onclick="removeHistRow(${i})">×</button></div>`;}
 
-function addHistRow(code){historyData.push({code,route:'',bsp:'',overEY:'',overBZ:'',ticketing:'',departure:'',notes:'',b2g:false});document.getElementById('historyEditList').insertAdjacentHTML('beforeend',renderHistRow(historyData[historyData.length-1],historyData.length-1));}
+function addHistRow(code){historyData.push({code,route:'',bsp:'',overEY:'',overBZ:'',ticketing:'',departure:'',notes:'',accountCode:'',b2g:false});document.getElementById('historyEditList').insertAdjacentHTML('beforeend',renderHistRow(historyData[historyData.length-1],historyData.length-1));}
 function removeHistRow(i){historyData.splice(i,1);const code=document.getElementById('adminAirlineSelect').value;loadAdminAirline(code);}
 
-function saveAirline(code){
+async function saveAirline(code){
   const a=airlines.find(x=>x.code===code);if(!a)return;
-  a.bsp=document.getElementById('ed-bsp').value;a.over=document.getElementById('ed-over').value;
-  a.soto=document.getElementById('ed-soto').value;a.reissue=document.getElementById('ed-reissue').value;
-  a.chd=document.getElementById('ed-chd').value;a.inf=document.getElementById('ed-inf').value;
+  const old={bsp:a.bsp,over:a.over,soto:a.soto,reissue:a.reissue,chd:a.chd,inf:a.inf,notes:a.notes};
+  a.bsp=document.getElementById('ed-bsp').value;
+  a.over=document.getElementById('ed-over').value;
+  a.soto=document.getElementById('ed-soto').value;
+  a.reissue=document.getElementById('ed-reissue').value;
+  a.chd=document.getElementById('ed-chd').value;
+  a.inf=document.getElementById('ed-inf').value;
   a.notes=document.getElementById('ed-notes').value;
   const rows=document.querySelectorAll('#historyEditList .history-edit-row'),codeHist=[];
-  rows.forEach(row=>{codeHist.push({code,route:row.querySelector('[data-field="route"]').value,bsp:row.querySelector('[data-field="bsp"]').value,overEY:row.querySelector('[data-field="overEY"]').value,overBZ:'',ticketing:row.querySelector('[data-field="ticketing"]').value,departure:row.querySelector('[data-field="departure"]').value,notes:row.querySelector('[data-field="notes"]').value,b2g:false});});
+  rows.forEach(row=>{codeHist.push({code,route:row.querySelector('[data-field="route"]').value,bsp:row.querySelector('[data-field="bsp"]').value,overEY:row.querySelector('[data-field="overEY"]').value,overBZ:'',ticketing:row.querySelector('[data-field="ticketing"]').value,departure:row.querySelector('[data-field="departure"]').value,notes:row.querySelector('[data-field="notes"]').value,accountCode:row.querySelector('[data-field="accountCode"]').value||'',b2g:false});});
   historyData=historyData.filter(h=>h.code!==code).concat(codeHist);
-  renderStats();renderCards();showToast(`${code} 커미션 정보가 저장되었습니다`,'success');
+  renderStats();renderCards();
+  showToast(`${code} 저장되었습니다`,'success');
+  const fields=['bsp','over','soto','reissue','chd','inf','notes'];
+  for(const f of fields){if(String(old[f])!==String(a[f])){appendAuditLog(code,f,old[f],a[f]);}}
 }
 
 function addImage(code){const a=airlines.find(x=>x.code===code);if(!a)return;const url=document.getElementById('newImgUrl').value.trim(),label=document.getElementById('newImgLabel').value.trim()||'이미지';if(!url){showToast('URL을 입력하세요','error');return;}let directUrl=url;const dm=url.match(/\/d\/([a-zA-Z0-9_-]+)/);if(dm)directUrl=`https://drive.google.com/uc?id=${dm[1]}`;if(!a.images)a.images=[];a.images.push({url:directUrl,label});loadAdminAirline(code);showToast('이미지가 추가되었습니다','success');}
