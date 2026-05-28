@@ -291,6 +291,14 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
       <h1 style="font-size:22px;font-weight:700;color:#1B2A4A">커미션 관리</h1>
       <p style="color:#888;font-size:13px;margin-top:4px">항공사별 커미션 정보를 수정하고 아카이빙 자료를 관리하세요</p>
     </div>
+    <div class="edit-section" style="margin-bottom:16px" id="adminMgmtSection" style="display:none">
+      <h3>관리자 계정 관리 <span style="font-size:11px;font-weight:400;color:#AAA">— 최고 관리자만 열람</span></h3>
+      <div id="adminEmailList" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="email" id="newAdminEmail" placeholder="추가할 이메일 (예: name@myrealtrip.com)" style="flex:1;padding:9px 12px;border:1.5px solid #D0D5DD;border-radius:7px;font-size:13px;font-family:inherit;outline:none">
+        <button class="btn-primary" onclick="addAdmin()" style="white-space:nowrap">관리자 추가</button>
+      </div>
+    </div>
     <div class="edit-section" style="margin-bottom:16px">
       <h3>공지사항 관리</h3>
       <div id="adminNoticeList" style="margin-bottom:12px"></div>
@@ -321,8 +329,11 @@ const SHEET_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=0#g
 const CLIENT_ID='396719596652-g0ipsj01avpaaufoad7pj169s1doicia.apps.googleusercontent.com';
 const ALLOWED_DOMAINS=['myrealtrip.com','aicx.kr'];
 const AUDIT_SHEET_NAME='변경이력';
+const ADMIN_SHEET_NAME='관리자';
+const SUPER_ADMIN='haram.an@myrealtrip.com';
 
 let airlines=[],historyData=[],currentUser=null,isAdmin=false,currentFilter='over',currentSearch='',currentView='card';
+let adminEmails=[SUPER_ADMIN];
 let tokenClient=null,accessToken=null;
 
 // AUTH
@@ -340,10 +351,11 @@ async function handleToken(resp){
   const info=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+accessToken}}).then(r=>r.json());
   if(!ALLOWED_DOMAINS.some(d=>info.email.endsWith('@'+d))){showToast('@myrealtrip.com 또는 @aicx.kr 계정만 가능','error');accessToken=null;return;}
   currentUser={name:info.name,email:info.email};
-  isAdmin=true;
+  await loadAdminList();
+  isAdmin=adminEmails.includes(info.email);
   document.getElementById('loginScreen').style.display='none';
   updateAuthUI();
-  await initAuditSheet();
+  if(isAdmin)await initAuditSheet();
   if(location.hash==='#admin')showAdminPanel();
   showToast(info.name+'님 환영합니다','success');
 }
@@ -395,6 +407,22 @@ async function sheetsBatchUpdate(requests){
   if(!accessToken)return;
   return fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`,{method:'POST',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},body:JSON.stringify({requests})}).then(r=>r.json()).catch(e=>console.error('batchUpdate error:',e));
 }
+async function loadAdminList(){
+  if(!accessToken)return;
+  try{
+    const meta=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`,{headers:{Authorization:'Bearer '+accessToken}}).then(r=>r.json());
+    const exists=(meta.sheets||[]).some(s=>s.properties.title===ADMIN_SHEET_NAME);
+    if(!exists){
+      await sheetsBatchUpdate([{addSheet:{properties:{title:ADMIN_SHEET_NAME,gridProperties:{rowCount:200,columnCount:3}}}}]);
+      await sheetsAppend(ADMIN_SHEET_NAME,[['이메일','이름','등록일'],[SUPER_ADMIN,'관리자',new Date().toLocaleDateString('ko-KR')]]);
+      adminEmails=[SUPER_ADMIN];return;
+    }
+    const data=await sheetsGetValues(ADMIN_SHEET_NAME+'!A:A');
+    if(data&&data.values){adminEmails=data.values.slice(1).map(r=>r[0]).filter(Boolean);}
+    if(!adminEmails.includes(SUPER_ADMIN))adminEmails.unshift(SUPER_ADMIN);
+  }catch(e){console.error('loadAdminList error:',e);}
+}
+
 async function initAuditSheet(){
   if(!accessToken)return;
   try{
@@ -500,6 +528,44 @@ document.addEventListener('click', () => {
   const nd = document.getElementById('noticeDropdown');
   if (nd) nd.classList.remove('show');
 });
+
+function renderAdminMgmt(){
+  const sec=document.getElementById('adminMgmtSection');
+  if(!sec)return;
+  if(currentUser&&currentUser.email===SUPER_ADMIN){sec.style.display='block';}else{sec.style.display='none';return;}
+  const list=document.getElementById('adminEmailList');
+  if(!list)return;
+  list.innerHTML=adminEmails.map(email=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #E8EAED;border-radius:6px;margin-bottom:6px;background:#fff">
+      <span style="font-size:13px;flex:1">${email}</span>
+      ${email===SUPER_ADMIN?'<span style="font-size:11px;color:#0066FF;font-weight:600">최고관리자</span>':
+        `<button onclick="removeAdmin('${email}')" style="background:none;border:none;color:#E53E3E;cursor:pointer;font-size:14px;padding:0 4px">삭제</button>`}
+    </div>`).join('');
+}
+
+async function addAdmin(){
+  const email=document.getElementById('newAdminEmail').value.trim().toLowerCase();
+  if(!email||!email.includes('@')){showToast('올바른 이메일을 입력하세요','error');return;}
+  if(adminEmails.includes(email)){showToast('이미 등록된 관리자입니다','error');return;}
+  adminEmails.push(email);
+  await sheetsAppend(ADMIN_SHEET_NAME,[[email,'',new Date().toLocaleDateString('ko-KR')]]);
+  document.getElementById('newAdminEmail').value='';
+  renderAdminMgmt();
+  showToast(`${email} 관리자로 등록되었습니다`,'success');
+}
+
+async function removeAdmin(email){
+  if(email===SUPER_ADMIN)return;
+  adminEmails=adminEmails.filter(e=>e!==email);
+  // Rewrite the admin sheet
+  const rows=[['이메일','이름','등록일'],...adminEmails.map(e=>[e,'',''])];
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(ADMIN_SHEET_NAME+'!A1')}?valueInputOption=USER_ENTERED`,{
+    method:'PUT',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},
+    body:JSON.stringify({values:rows})
+  });
+  renderAdminMgmt();
+  showToast(`${email} 관리자 삭제됨`);
+}
 
 function renderAdminNotices() {
   const list = document.getElementById('adminNoticeList');
@@ -858,6 +924,7 @@ function showAdminPanel(){
   const s=document.getElementById('adminAirlineSelect');
   s.innerHTML='<option value="">항공사 선택...</option>'+airlines.map(a=>`<option value="${a.code}">${a.code}</option>`).join('');
   renderAdminNotices();
+  renderAdminMgmt();
 }
 
 function loadAdminAirline(code){
