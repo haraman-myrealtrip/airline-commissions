@@ -234,29 +234,34 @@ const ALLOWED_DOMAIN='myrealtrip.com';
 let airlines=[],historyData=[],currentUser=null,isAdmin=false,currentFilter='all',currentSearch='';
 
 // AUTH
-function googleLogin(){
-  google.accounts.id.initialize({client_id:CLIENT_ID,callback:handleCred,auto_select:false,hosted_domain:ALLOWED_DOMAIN});
-  google.accounts.id.prompt();
+let tokenClient=null;
+function initGoogleAuth(){
+  if(typeof google==='undefined'||!google.accounts||!google.accounts.oauth2){setTimeout(initGoogleAuth,100);return;}
+  tokenClient=google.accounts.oauth2.initTokenClient({
+    client_id:CLIENT_ID,
+    scope:'email profile',
+    hosted_domain:ALLOWED_DOMAIN,
+    callback:async(resp)=>{
+      if(resp.error){showToast('로그인 실패','error');return;}
+      const info=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+resp.access_token}}).then(r=>r.json());
+      if(!info.email.endsWith('@'+ALLOWED_DOMAIN)){showToast('@myrealtrip.com 계정만 가능','error');return;}
+      currentUser={name:info.name,email:info.email};
+      isAdmin=true;
+      updateAuthUI();
+      if(location.hash==='#admin')showAdminPanel();
+      showToast(info.name+'님 환영합니다','success');
+    }
+  });
 }
-function handleCred(r){
-  const p=JSON.parse(atob(r.credential.split('.')[1]));
-  if(!p.email.endsWith('@'+ALLOWED_DOMAIN)){showToast('@myrealtrip.com 계정만 가능','error');return;}
-  currentUser={name:p.name,email:p.email};
-  isAdmin=true;
-  updateAuthUI();
-  if(location.hash==='#admin')showAdminPanel();
-  showToast(p.name+'님 환영합니다','success');
+function googleLogin(){
+  if(!tokenClient){showToast('잠시 후 다시 시도하세요','error');return;}
+  tokenClient.requestAccessToken({prompt:'select_account'});
 }
 function logout(){
-  if(currentUser){google.accounts.id.revoke(currentUser.email,()=>{});}
-  google.accounts.id.disableAutoSelect();
-  currentUser=null;
-  isAdmin=false;
+  if(currentUser)google.accounts.oauth2.revoke(currentUser.email,()=>{});
+  currentUser=null;isAdmin=false;
   updateAuthUI();
-  if(location.hash==='#admin'){
-    document.getElementById('adminLoginPrompt').style.display='block';
-    document.getElementById('adminPanel').classList.remove('visible');
-  }
+  if(location.hash==='#admin'){document.getElementById('adminLoginPrompt').style.display='block';document.getElementById('adminPanel').classList.remove('visible');}
 }
 function updateAuthUI(){const n=document.getElementById('navRight');if(currentUser){const i=currentUser.name.split(' ').map(x=>x[0]).join('').substring(0,2);n.innerHTML=`<span class="user">${currentUser.email}</span><div class="avatar">${i}</div><button class="btn-logout" onclick="logout()">로그아웃</button>`;}else{n.innerHTML='<button class="btn-login" onclick="googleLogin()">Google 로그인</button>';}}
 
@@ -506,7 +511,7 @@ document.getElementById('searchInput').addEventListener('input',e=>{currentSearc
 document.querySelectorAll('.fbtn').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.fbtn').forEach(x=>x.classList.remove('act'));b.classList.add('act');currentFilter=b.dataset.f;renderCards();}));
 
 // INIT
-loadEmbeddedData();renderStats();renderCards();handleRoute();
+loadEmbeddedData();renderStats();renderCards();handleRoute();initGoogleAuth();
 </script>
 </body>
 </html>
