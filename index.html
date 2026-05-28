@@ -157,6 +157,37 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
 
 @media(max-width:768px){.detail-grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.history-edit-row{grid-template-columns:1fr}}
 
+/* NOTICE */
+.notice-bell{position:relative;cursor:pointer;padding:6px;border-radius:8px;transition:background 0.2s;display:none}
+.notice-bell.visible{display:flex;align-items:center}
+.notice-bell:hover{background:rgba(255,255,255,0.1)}
+.notice-bell svg{width:20px;height:20px;fill:rgba(255,255,255,0.7)}
+.notice-badge{position:absolute;top:2px;right:2px;background:#E53E3E;color:#fff;font-size:9px;font-weight:700;width:15px;height:15px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.notice-dropdown{position:absolute;top:44px;right:0;background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.18);width:340px;max-height:380px;overflow-y:auto;z-index:300;display:none;border:1px solid #E8EAED}
+.notice-dropdown.show{display:block}
+.notice-dropdown-header{padding:12px 16px;border-bottom:1px solid #E8EAED;font-weight:700;font-size:13px;color:#1B2A4A}
+.notice-item{padding:12px 16px;border-bottom:1px solid #F5F5F5;cursor:default}
+.notice-item:last-child{border-bottom:none}
+.notice-item.urgent{border-left:3px solid #E53E3E;background:#FFF5F5}
+.notice-item .ni-title{font-weight:600;font-size:13px;color:#1B2A4A;margin-bottom:3px}
+.notice-item .ni-body{font-size:12px;color:#555;line-height:1.5}
+.notice-item .ni-date{font-size:11px;color:#AAA;margin-top:4px}
+.notice-empty{padding:32px 16px;text-align:center;color:#AAA;font-size:13px}
+.notice-banner{background:linear-gradient(90deg,#FFF7ED,#FFFBEB);border-bottom:1px solid #FED7AA;padding:10px 32px;display:flex;align-items:center;gap:10px;font-size:13px;color:#92400E}
+.notice-banner.hidden{display:none}
+.notice-banner .nb-text{flex:1}
+.notice-banner .nb-close{cursor:pointer;color:#B45309;font-size:18px;padding:0 4px;background:none;border:none}
+
+/* LIST VIEW */
+.list-tbl{width:100%;background:#fff;border-radius:10px;border:1px solid #E8EAED;border-collapse:collapse;font-size:13px;overflow:hidden}
+.list-tbl thead th{background:#1B2A4A;color:#fff;padding:11px 14px;text-align:left;font-weight:600;font-size:12px;white-space:nowrap}
+.list-tbl tbody td{padding:10px 14px;border-bottom:1px solid #F1F5F9;vertical-align:middle}
+.list-tbl tbody tr{cursor:pointer;transition:background 0.15s}
+.list-tbl tbody tr:hover td{background:#F7F8FA}
+.list-tbl .cv{font-weight:700;text-align:center}
+.list-tbl .cv.hi{color:#00A86B}
+.list-tbl .cv.ze{color:#D0D5DD}
+
 /* LOGIN SCREEN */
 #loginScreen{position:fixed;inset:0;background:#1B2A4A;z-index:500;display:flex;align-items:center;justify-content:center}
 .login-card{background:#fff;border-radius:16px;padding:44px 48px;max-width:400px;width:90%;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,0.35)}
@@ -189,12 +220,25 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
   <div class="nav-links">
     <a class="active" onclick="navigate('list')">대시보드</a>
     <a onclick="navigate('admin')">관리자</a>
-    <a href="index.html">실적 대시보드</a>
   </div>
+  <div class="notice-bell" id="noticeBell" onclick="toggleNoticeDropdown(event)">
+  <svg viewBox="0 0 24 24"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+  <span class="notice-badge" id="noticeBadge" style="display:none">0</span>
+  <div class="notice-dropdown" id="noticeDropdown">
+    <div class="notice-dropdown-header">공지사항</div>
+    <div id="noticeList"></div>
+  </div>
+</div>
   <div class="nav-right" id="navRight">
     <button class="btn-login" onclick="googleLogin()">Google 로그인</button>
   </div>
 </nav>
+
+<div class="notice-banner hidden" id="noticeBanner">
+  <span style="font-size:16px">📢</span>
+  <span class="nb-text" id="noticeBannerText"></span>
+  <button class="nb-close" onclick="this.parentElement.classList.add('hidden')">×</button>
+</div>
 
 <!-- LIST -->
 <div class="page active" id="page-list">
@@ -209,12 +253,17 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
       <input type="text" id="searchInput" placeholder="항공사 코드 검색 (AA, BR, NH...)">
     </div>
-    <button class="fbtn act" data-f="all">전체</button>
+    <button class="fbtn act" data-f="over">오버컴</button>
     <button class="fbtn" data-f="bsp">BSP컴</button>
-    <button class="fbtn" data-f="over">오버컴</button>
-    <button class="fbtn" data-f="nocom">노커미션</button>
+    <button class="fbtn" data-f="kea">0컴(KE@A)</button>
+    <button class="fbtn" data-f="all">전체</button>
+    <div style="margin-left:auto;display:flex;gap:4px">
+      <button class="fbtn view-btn act" data-v="card">카드형</button>
+      <button class="fbtn view-btn" data-v="list">리스트형</button>
+    </div>
   </div>
   <div class="grid" id="cardGrid"></div>
+  <div id="listView" style="display:none"></div>
   <div class="empty" id="emptyState" style="display:none">검색 결과가 없습니다</div>
 </div>
 
@@ -242,6 +291,17 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
       <h1 style="font-size:22px;font-weight:700;color:#1B2A4A">커미션 관리</h1>
       <p style="color:#888;font-size:13px;margin-top:4px">항공사별 커미션 정보를 수정하고 아카이빙 자료를 관리하세요</p>
     </div>
+    <div class="edit-section" style="margin-bottom:16px">
+      <h3>공지사항 관리</h3>
+      <div id="adminNoticeList" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="text" id="noticeTitle" placeholder="공지 제목" style="flex:1;min-width:150px;padding:9px 12px;border:1.5px solid #D0D5DD;border-radius:7px;font-size:13px;font-family:inherit;outline:none">
+        <input type="text" id="noticeBody" placeholder="공지 내용 (선택)" style="flex:2;min-width:200px;padding:9px 12px;border:1.5px solid #D0D5DD;border-radius:7px;font-size:13px;font-family:inherit;outline:none">
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:#555;white-space:nowrap"><input type="checkbox" id="noticeUrgent"> 긴급</label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:#555;white-space:nowrap"><input type="checkbox" id="noticeBannerChk"> 배너표시</label>
+        <button class="btn-primary" onclick="addNotice()" style="white-space:nowrap">추가</button>
+      </div>
+    </div>
     <div class="admin-toolbar">
       <select id="adminAirlineSelect" onchange="loadAdminAirline(this.value)"><option value="">항공사 선택...</option></select>
       <button class="btn-secondary" onclick="openSheetDirect()">Google Sheets에서 직접 편집</button>
@@ -262,7 +322,7 @@ const CLIENT_ID='396719596652-g0ipsj01avpaaufoad7pj169s1doicia.apps.googleuserco
 const ALLOWED_DOMAINS=['myrealtrip.com','aicx.kr'];
 const AUDIT_SHEET_NAME='변경이력';
 
-let airlines=[],historyData=[],currentUser=null,isAdmin=false,currentFilter='all',currentSearch='';
+let airlines=[],historyData=[],currentUser=null,isAdmin=false,currentFilter='over',currentSearch='',currentView='card';
 let tokenClient=null,accessToken=null;
 
 // AUTH
@@ -298,7 +358,17 @@ function logout(){
   updateAuthUI();
   if(location.hash==='#admin'){document.getElementById('adminLoginPrompt').style.display='block';document.getElementById('adminPanel').classList.remove('visible');}
 }
-function updateAuthUI(){const n=document.getElementById('navRight');if(currentUser){const i=currentUser.name.split(' ').map(x=>x[0]).join('').substring(0,2);n.innerHTML=`<span class="user">${currentUser.email}</span><div class="avatar">${i}</div><button class="btn-logout" onclick="logout()">로그아웃</button>`;}else{n.innerHTML='<button class="btn-login" onclick="googleLogin()">Google 로그인</button>';}}
+function updateAuthUI(){
+  const n=document.getElementById('navRight');
+  if(currentUser){
+    const i=currentUser.name.split(' ').map(x=>x[0]).join('').substring(0,2);
+    n.innerHTML=`<span class="user">${currentUser.email}</span><div class="avatar">${i}</div><button class="btn-logout" onclick="logout()">로그아웃</button>`;
+    document.getElementById('noticeBell').classList.add('visible');
+  } else {
+    n.innerHTML='<button class="btn-login" onclick="googleLogin()">Google 로그인</button>';
+    document.getElementById('noticeBell').classList.remove('visible');
+  }
+}
 
 // ROUTING
 function navigate(page,param){location.hash=page==='detail'&&param?`#detail/${param}`:`#${page}`;}
@@ -388,6 +458,85 @@ function removeFile(code,idx){
   if(removed)appendAuditLog(code,'파일삭제',removed.label,'-');
   renderDetail(code);
   showToast('파일이 삭제되었습니다');
+}
+
+// NOTICES
+let notices = [];
+let nextNoticeId = 1;
+
+function renderNotices() {
+  const list = document.getElementById('noticeList');
+  const badge = document.getElementById('noticeBadge');
+  const banner = document.getElementById('noticeBanner');
+  const bannerText = document.getElementById('noticeBannerText');
+  if (!list) return;
+  if (notices.length === 0) {
+    list.innerHTML = '<div class="notice-empty">등록된 공지사항이 없습니다</div>';
+    badge.style.display = 'none';
+  } else {
+    badge.style.display = 'flex';
+    badge.textContent = notices.length;
+    list.innerHTML = notices.map(n => `
+      <div class="notice-item ${n.urgent ? 'urgent' : ''}">
+        <div class="ni-title">${n.urgent ? '🚨 ' : ''}${n.title}</div>
+        ${n.body ? `<div class="ni-body">${n.body}</div>` : ''}
+        <div class="ni-date">${n.date}</div>
+      </div>`).join('');
+  }
+  // Show banner for first banner-flagged notice
+  const bannerNotice = notices.find(n => n.banner);
+  if (bannerNotice) {
+    bannerText.textContent = `${bannerNotice.title}${bannerNotice.body ? ' — ' + bannerNotice.body : ''}`;
+    banner.classList.remove('hidden');
+  }
+}
+
+function toggleNoticeDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('noticeDropdown').classList.toggle('show');
+}
+
+document.addEventListener('click', () => {
+  const nd = document.getElementById('noticeDropdown');
+  if (nd) nd.classList.remove('show');
+});
+
+function renderAdminNotices() {
+  const list = document.getElementById('adminNoticeList');
+  if (!list) return;
+  if (!notices.length) { list.innerHTML = '<p style="color:#AAA;font-size:13px">등록된 공지사항이 없습니다</p>'; return; }
+  list.innerHTML = notices.map(n => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid ${n.urgent?'#FEB2B2':'#E8EAED'};border-radius:6px;margin-bottom:6px;background:${n.urgent?'#FFF5F5':'#fff'}">
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${n.urgent?'🚨 ':''}${n.title}</div>
+        ${n.body?`<div style="font-size:12px;color:#555">${n.body}</div>`:''}
+      </div>
+      <span style="font-size:11px;color:#AAA;white-space:nowrap">${n.date}</span>
+      <button onclick="removeNotice(${n.id})" style="background:none;border:none;color:#E53E3E;cursor:pointer;font-size:18px;padding:0 4px">×</button>
+    </div>`).join('');
+}
+
+function addNotice() {
+  const title = document.getElementById('noticeTitle').value.trim();
+  const body = document.getElementById('noticeBody').value.trim();
+  const urgent = document.getElementById('noticeUrgent').checked;
+  const banner = document.getElementById('noticeBannerChk').checked;
+  if (!title) { showToast('제목을 입력하세요', 'error'); return; }
+  notices.unshift({ id: nextNoticeId++, title, body, urgent, banner, date: new Date().toLocaleDateString('ko-KR') });
+  document.getElementById('noticeTitle').value = '';
+  document.getElementById('noticeBody').value = '';
+  document.getElementById('noticeUrgent').checked = false;
+  document.getElementById('noticeBannerChk').checked = false;
+  renderNotices();
+  renderAdminNotices();
+  showToast('공지사항이 등록되었습니다', 'success');
+}
+
+function removeNotice(id) {
+  notices = notices.filter(n => n.id !== id);
+  renderNotices();
+  renderAdminNotices();
+  showToast('공지사항이 삭제되었습니다');
 }
 
 // DATA
@@ -500,6 +649,33 @@ function loadEmbeddedData(){
 
 // RENDER HELPERS
 function gn(v){return parseFloat(String(v).replace(/[^0-9.]/g,''))||0;}
+
+function renderAccountCodeCard(acct, code) {
+  const parts = acct.includes(' / ') ? acct.split(' / ') : [acct];
+  if (parts.length === 1) {
+    return `<div class="card-acct"><span class="acct-label">Account Code</span><span class="acct-val">${acct}</span><button class="acct-copy" onclick="event.stopPropagation();copyAccountCode('${acct.replace(/'/g,"\\'")}',this)">복사</button></div>`;
+  }
+  return parts.map(p => {
+    const colonIdx = p.indexOf(':');
+    const label = colonIdx > -1 ? p.substring(0, colonIdx).trim() : 'Code';
+    const val = colonIdx > -1 ? p.substring(colonIdx + 1).trim() : p.trim();
+    return `<div class="card-acct"><span class="acct-label">${label}</span><span class="acct-val">${val}</span><button class="acct-copy" onclick="event.stopPropagation();copyAccountCode('${val.replace(/'/g,"\\'")}',this)">복사</button></div>`;
+  }).join('');
+}
+
+function renderAccountCodeDetail(acct) {
+  const parts = acct.includes(' / ') ? acct.split(' / ') : [acct];
+  return parts.map(p => {
+    const colonIdx = p.indexOf(':');
+    const label = colonIdx > -1 ? p.substring(0, colonIdx).trim() : 'Account Code';
+    const val = colonIdx > -1 ? p.substring(colonIdx + 1).trim() : p.trim();
+    return `<div style="display:flex;align-items:center;gap:10px;margin-top:8px;padding:10px 14px;background:#F0F7FF;border-radius:8px;border:1px solid #D0E4FF">
+      <span style="font-size:11px;font-weight:700;color:#0066FF;text-transform:uppercase;letter-spacing:0.3px;min-width:40px">${label}</span>
+      <span style="font-family:'Courier New',monospace;font-size:13px;font-weight:600;color:#1B2A4A;flex:1">${val}</span>
+      <button class="acct-copy" onclick="copyAccountCode('${val.replace(/'/g,"\\'")}',this)">복사</button>
+    </div>`;
+  }).join('');
+}
 function fmtRate(v){const s=String(v);return s.includes('%')?s:s+'%';}
 function isActive(t){if(!t)return false;const m=t.match(/~\s*(\d{4})[\./]?(\d{1,2})[\./]?(\d{1,2})?/);if(m)return new Date(parseInt(m[1]),parseInt(m[2])-1,parseInt(m[3]||'28'))>=new Date();return t.includes('2026')||t.includes('2027');}
 function getAccountCode(code){const h=historyData.find(x=>x.code===code&&x.accountCode&&isActive(x.ticketing));return h?h.accountCode:null;}
@@ -517,10 +693,29 @@ function renderCards(){
   if(currentSearch){const q=currentSearch.toUpperCase();list=list.filter(a=>a.code.toUpperCase().includes(q));}
   if(currentFilter==='bsp')list=list.filter(a=>gn(a.bsp)>0);
   else if(currentFilter==='over')list=list.filter(a=>gn(a.over)>0);
-  else if(currentFilter==='nocom')list=list.filter(a=>gn(a.bsp)===0&&gn(a.over)===0);
-  const grid=document.getElementById('cardGrid'),empty=document.getElementById('emptyState');
-  if(!list.length){grid.innerHTML='';empty.style.display='block';return;}
+  else if(currentFilter==='kea')list=list.filter(a=>a.notes&&a.notes.includes('KE@A'));
+  const grid=document.getElementById('cardGrid'),lv=document.getElementById('listView'),empty=document.getElementById('emptyState');
+  if(!list.length){grid.innerHTML='';lv.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
+  if(currentView==='list'){
+    grid.style.display='none';
+    lv.style.display='block';
+    lv.innerHTML=`<table class="list-tbl"><thead><tr><th>항공사</th><th>BSP컴</th><th>오버컴</th><th>SOTO</th><th>재발행</th><th>소아</th><th>유아</th><th>비고</th></tr></thead><tbody>${list.map(a=>{
+      const bn=gn(a.bsp),on=gn(a.over);
+      return`<tr onclick="navigate('detail','${encodeURIComponent(a.code)}')">
+        <td style="font-weight:800;font-size:15px">${a.code}</td>
+        <td class="cv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</td>
+        <td class="cv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</td>
+        <td class="cv">${fmtRate(a.soto)}</td>
+        <td class="cv">${fmtRate(a.reissue)}</td>
+        <td class="cv">${fmtRate(a.chd)}</td>
+        <td class="cv">${fmtRate(a.inf)}</td>
+        <td style="font-size:12px;color:#555;max-width:280px">${a.notes||'-'}</td>
+      </tr>`;}).join('')}</tbody></table>`;
+    return;
+  }
+  grid.style.display='';
+  lv.style.display='none';
   grid.innerHTML=list.map(a=>{
     const bn=gn(a.bsp),on=gn(a.over),cls=on>0?'ov':(bn>0?'bsp-only':'nc');
     const hist=historyData.filter(h=>h.code===a.code);
@@ -530,7 +725,7 @@ function renderCards(){
     if(!bn&&!on)badges.push(`<span class="badge nocom">노컴</span>`);
     if(hist.some(h=>h.b2g))badges.push(`<span class="badge b2g">B2G</span>`);
     const acct=getAccountCode(a.code);
-    const acctHtml=acct?`<div class="card-acct"><span class="acct-label">Account Code</span><span class="acct-val">${acct}</span><button class="acct-copy" onclick="event.stopPropagation();copyAccountCode('${acct}',this)">복사</button></div>`:'';
+    const acctHtml=acct?renderAccountCodeCard(acct,a.code):'';
     return`<div class="card ${cls}" onclick="navigate('detail','${encodeURIComponent(a.code)}')"><div class="card-top"><span class="card-code">${a.code}</span><div class="badges">${badges.join('')}</div></div><div class="card-rates"><div class="rate"><div class="rl">BSP</div><div class="rv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</div></div><div class="rate"><div class="rl">오버컴</div><div class="rv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div><div class="rate"><div class="rl">SOTO</div><div class="rv ${gn(a.soto)>0?'hi':'ze'}">${fmtRate(a.soto)}</div></div></div><div class="card-tags"><div class="tag">재발행 <b>${fmtRate(a.reissue)}</b></div><div class="tag">소아 <b>${fmtRate(a.chd)}</b></div><div class="tag">유아 <b>${fmtRate(a.inf)}</b></div></div>${acctHtml}<div class="card-arrow">상세 보기 →</div></div>`;
   }).join('');
 }
@@ -547,7 +742,7 @@ function renderDetail(code){
   const hist=historyData.filter(h=>h.code===code);
   const noteHtml=a.notes?`<div class="note-box">${a.notes}</div>`:'';
   const acct=getAccountCode(a.code);
-  const acctHtml=acct?`<div style="display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 14px;background:#F0F7FF;border-radius:8px;border:1px solid #D0E4FF"><span style="font-size:11px;font-weight:700;color:#0066FF;text-transform:uppercase;letter-spacing:0.3px">Account Code</span><span style="font-family:'Courier New',monospace;font-size:13px;font-weight:600;color:#1B2A4A;flex:1">${acct}</span><button class="acct-copy" onclick="copyAccountCode('${acct}',this)">복사</button></div>`:'';
+  const acctHtml=acct?renderAccountCodeDetail(acct):'';
   const editBtn=isAdmin?`<button class="btn-secondary" onclick="navigate('admin');setTimeout(()=>{document.getElementById('adminAirlineSelect').value='${a.code}';loadAdminAirline('${a.code}')},100)" style="margin-left:auto;font-size:12px">수정하기</button>`:'';
 
   const activeHist=hist.filter(h=>isActive(h.ticketing));
@@ -657,7 +852,13 @@ function renderDetail(code){
 }
 
 // ADMIN
-function showAdminPanel(){document.getElementById('adminLoginPrompt').style.display='none';document.getElementById('adminPanel').classList.add('visible');const s=document.getElementById('adminAirlineSelect');s.innerHTML='<option value="">항공사 선택...</option>'+airlines.map(a=>`<option value="${a.code}">${a.code}</option>`).join('');}
+function showAdminPanel(){
+  document.getElementById('adminLoginPrompt').style.display='none';
+  document.getElementById('adminPanel').classList.add('visible');
+  const s=document.getElementById('adminAirlineSelect');
+  s.innerHTML='<option value="">항공사 선택...</option>'+airlines.map(a=>`<option value="${a.code}">${a.code}</option>`).join('');
+  renderAdminNotices();
+}
 
 function loadAdminAirline(code){
   if(!code){document.getElementById('adminEditArea').innerHTML='';return;}
@@ -718,10 +919,16 @@ document.getElementById('imgModal').addEventListener('click',e=>{if(e.target===e
 
 // EVENTS
 document.getElementById('searchInput').addEventListener('input',e=>{currentSearch=e.target.value.trim();renderCards();});
-document.querySelectorAll('.fbtn').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.fbtn').forEach(x=>x.classList.remove('act'));b.classList.add('act');currentFilter=b.dataset.f;renderCards();}));
+document.querySelectorAll('.fbtn:not(.view-btn)').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.fbtn:not(.view-btn)').forEach(x=>x.classList.remove('act'));b.classList.add('act');currentFilter=b.dataset.f;renderCards();}));
+document.querySelectorAll('.view-btn').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.view-btn').forEach(x=>x.classList.remove('act'));
+  b.classList.add('act');
+  currentView=b.dataset.v;
+  renderCards();
+}));
 
 // INIT
-loadEmbeddedData();renderStats();renderCards();handleRoute();initGoogleAuth();
+loadEmbeddedData();renderStats();renderCards();handleRoute();initGoogleAuth();renderNotices();
 </script>
 </body>
 </html>
