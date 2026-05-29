@@ -355,7 +355,7 @@ async function handleToken(resp){
   document.getElementById('loginScreen').style.display='none';
   updateAuthUI();
   if(isAdmin)await initAuditSheet();
-  if(location.hash==='#admin')showAdminPanel();
+  if(location.hash==='#admin'&&isAdmin)showAdminPanel();
   showToast(info.name+'님 환영합니다','success');
 }
 function googleLogin(){
