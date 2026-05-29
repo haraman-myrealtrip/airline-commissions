@@ -339,13 +339,34 @@ let airlines=[],historyData=[],currentUser=null,isAdmin=false,currentFilter='ove
 let tokenClient=null,accessToken=null;
 
 // AUTH
+let adminTokenClient=null;
 function initGoogleAuth(){
   if(typeof google==='undefined'||!google.accounts||!google.accounts.oauth2){setTimeout(initGoogleAuth,100);return;}
+  // 일반 로그인: 최소 스코프만 요청 (모든 사용자)
   tokenClient=google.accounts.oauth2.initTokenClient({
     client_id:CLIENT_ID,
-    scope:'email profile https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file',
+    scope:'email profile',
     callback:handleToken
   });
+  // 관리자 저장용: 추가 스코프 (관리자만, 저장 시 요청)
+  adminTokenClient=google.accounts.oauth2.initTokenClient({
+    client_id:CLIENT_ID,
+    scope:'email profile https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file',
+    callback:handleAdminToken
+  });
+}
+function handleAdminToken(resp){
+  if(resp.error){showToast('권한 요청 실패','error');return;}
+  accessToken=resp.access_token;
+  showToast('저장 권한이 확인되었습니다','success');
+  pendingAdminSave&&pendingAdminSave();
+  pendingAdminSave=null;
+}
+let pendingAdminSave=null;
+async function requestAdminAccess(callback){
+  if(accessToken){callback();return;}
+  pendingAdminSave=callback;
+  adminTokenClient.requestAccessToken({prompt:''});
 }
 async function handleToken(resp){
   if(resp.error){showToast('로그인 실패','error');return;}
@@ -356,10 +377,15 @@ async function handleToken(resp){
   isAdmin=ADMIN_EMAILS.includes(info.email);
   document.getElementById('loginScreen').style.display='none';
   updateAuthUI();
-  showToast('데이터 불러오는 중...','');
-  await initDataSheets();
-  if(isAdmin)await initAuditSheet();
   renderStats();renderCards();
+  if(isAdmin){
+    requestAdminAccess(async()=>{
+      await initDataSheets();
+      await initAuditSheet();
+      renderStats();renderCards();
+      if(location.hash==='#admin')showAdminPanel();
+    });
+  }
   if(location.hash==='#admin'&&isAdmin)showAdminPanel();
   showToast(info.name+'님 환영합니다','success');
 }
@@ -996,6 +1022,7 @@ function addHistRow(code){historyData.push({code,route:'',bsp:'',overEY:'',overB
 function removeHistRow(i){historyData.splice(i,1);const code=document.getElementById('adminAirlineSelect').value;loadAdminAirline(code);}
 
 async function saveAirline(code){
+  if(!accessToken){requestAdminAccess(()=>saveAirline(code));return;}
   const a=airlines.find(x=>x.code===code);if(!a)return;
   const old={bsp:a.bsp,over:a.over,soto:a.soto,reissue:a.reissue,chd:a.chd,inf:a.inf,notes:a.notes};
   a.bsp=document.getElementById('ed-bsp').value;
