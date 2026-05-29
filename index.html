@@ -769,7 +769,6 @@ function renderCards(){
     if(bn>0)badges.push(`<span class="badge bsp">BSP ${fmtRate(a.bsp)}</span>`);
     if(on>0)badges.push(`<span class="badge over">오버컴 ${fmtRate(a.over)}</span>`);
     if(!bn&&!on)badges.push(`<span class="badge nocom">노컴</span>`);
-    if(hist.some(h=>h.b2g))badges.push(`<span class="badge b2g">B2G</span>`);
     const acct=getAccountCode(a.code);
     const acctHtml=acct?renderAccountCodeCard(acct,a.code):'';
     return`<div class="card ${cls}" onclick="navigate('detail','${encodeURIComponent(a.code)}')"><div class="card-top"><span class="card-code">${a.code}</span><div class="badges">${badges.join('')}</div></div><div class="card-rates"><div class="rate"><div class="rl">BSP</div><div class="rv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</div></div><div class="rate"><div class="rl">오버컴</div><div class="rv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div><div class="rate"><div class="rl">SOTO</div><div class="rv ${gn(a.soto)>0?'hi':'ze'}">${fmtRate(a.soto)}</div></div></div><div class="card-tags"><div class="tag">재발행 <b>${fmtRate(a.reissue)}</b></div><div class="tag">소아 <b>${fmtRate(a.chd)}</b></div><div class="tag">유아 <b>${fmtRate(a.inf)}</b></div></div>${acctHtml}<div class="card-arrow">상세 보기 →</div></div>`;
@@ -803,7 +802,7 @@ function renderDetail(code){
             <span style="font-size:11px;font-weight:700;color:#00A86B;text-transform:uppercase;letter-spacing:0.5px">현재 유효 (${activeHist.length}건)</span>
           </div>
           <table class="htbl"><thead><tr><th>노선</th><th>BSP</th><th>오버컴(EY)</th><th>오버컴(BZ)</th><th>발권기간</th><th>출발기간</th><th>Account Code</th><th>비고</th></tr></thead>
-          <tbody>${activeHist.map(h=>`<tr class="cur"><td class="rt">${h.b2g?'<span class="b2g-tag">B2G</span>':''}${h.route||'-'}</td><td>${h.bsp||'-'}</td><td>${h.overEY||'-'}</td><td>${h.overBZ||'-'}</td><td class="pr">${h.ticketing||'-'}</td><td class="pr">${h.departure||'-'}</td><td style="font-family:monospace;font-size:11px">${h.accountCode||'-'}</td><td class="nc">${h.notes||'-'}</td></tr>`).join('')}</tbody>
+          <tbody>${activeHist.map(h=>`<tr class="cur"><td class="rt">${h.route||'-'}</td><td>${h.bsp||'-'}</td><td>${h.overEY||'-'}</td><td>${h.overBZ||'-'}</td><td class="pr">${h.ticketing||'-'}</td><td class="pr">${h.departure||'-'}</td><td style="font-family:monospace;font-size:11px">${h.accountCode||'-'}</td><td class="nc">${h.notes||'-'}</td></tr>`).join('')}</tbody>
           </table>
         </div>`:''}
       ${expiredHist.length?`
@@ -813,7 +812,7 @@ function renderDetail(code){
             만료된 히스토리 (${expiredHist.length}건) ▾
           </summary>
           <table class="htbl" style="opacity:0.7"><thead><tr><th>노선</th><th>BSP</th><th>오버컴(EY)</th><th>오버컴(BZ)</th><th>발권기간</th><th>출발기간</th><th>Account Code</th><th>비고</th></tr></thead>
-          <tbody>${expiredHist.map(h=>`<tr><td class="rt">${h.b2g?'<span class="b2g-tag">B2G</span>':''}${h.route||'-'}</td><td>${h.bsp||'-'}</td><td>${h.overEY||'-'}</td><td>${h.overBZ||'-'}</td><td class="pr">${h.ticketing||'-'}</td><td class="pr">${h.departure||'-'}</td><td style="font-family:monospace;font-size:11px">${h.accountCode||'-'}</td><td class="nc">${h.notes||'-'}</td></tr>`).join('')}</tbody>
+          <tbody>${expiredHist.map(h=>`<tr><td class="rt">${h.route||'-'}</td><td>${h.bsp||'-'}</td><td>${h.overEY||'-'}</td><td>${h.overBZ||'-'}</td><td class="pr">${h.ticketing||'-'}</td><td class="pr">${h.departure||'-'}</td><td style="font-family:monospace;font-size:11px">${h.accountCode||'-'}</td><td class="nc">${h.notes||'-'}</td></tr>`).join('')}</tbody>
           </table>
         </details>`:''}
       ${!hist.length?'<p style="color:#AAA;text-align:center;padding:30px">히스토리가 없습니다</p>':''}
