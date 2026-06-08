@@ -336,13 +336,13 @@ const SUPER_ADMIN='haram.an@myrealtrip.com';
 const ADMIN_EMAILS=['haram.an@myrealtrip.com']; // 관리자 추가 시 여기에 이메일 추가
 
 let airlines=[],historyData=[],currentUser=null,isAdmin=false,currentFilter='over',currentSearch='',currentView='card';
-let tokenClient=null,accessToken=null;
+let tokenClient=null,accessToken=null,adminAccessToken=null;
 
 // AUTH
 let adminTokenClient=null;
 function initGoogleAuth(){
   if(typeof google==='undefined'||!google.accounts||!google.accounts.oauth2){setTimeout(initGoogleAuth,100);return;}
-  // 일반 로그인: 최소 스코프만 요청 (모든 사용자)
+  // 일반 로그인: 프로필만 요청 (Sheets는 관리자 토큰으로만 접근)
   tokenClient=google.accounts.oauth2.initTokenClient({
     client_id:CLIENT_ID,
     scope:'email profile',
@@ -357,16 +357,16 @@ function initGoogleAuth(){
 }
 function handleAdminToken(resp){
   if(resp.error){showToast('권한 요청 실패','error');return;}
-  accessToken=resp.access_token;
+  adminAccessToken=resp.access_token;
   showToast('저장 권한이 확인되었습니다','success');
   pendingAdminSave&&pendingAdminSave();
   pendingAdminSave=null;
 }
 let pendingAdminSave=null;
 async function requestAdminAccess(callback){
-  if(accessToken){callback();return;}
+  if(adminAccessToken){callback();return;}
   pendingAdminSave=callback;
-  adminTokenClient.requestAccessToken({prompt:''});
+  adminTokenClient.requestAccessToken({prompt:'select_account'});
 }
 async function handleToken(resp){
   if(resp.error){showToast('로그인 실패','error');return;}
@@ -395,7 +395,8 @@ function googleLogin(){
 }
 function logout(){
   if(accessToken&&currentUser){google.accounts.oauth2.revoke(accessToken,()=>{});}
-  accessToken=null;currentUser=null;isAdmin=false;
+  if(adminAccessToken){google.accounts.oauth2.revoke(adminAccessToken,()=>{});}
+  accessToken=null;adminAccessToken=null;currentUser=null;isAdmin=false;
   document.getElementById('loginScreen').style.display='flex';
   updateAuthUI();
   if(location.hash==='#admin'){document.getElementById('adminLoginPrompt').style.display='block';document.getElementById('adminPanel').classList.remove('visible');}
@@ -426,37 +427,38 @@ window.addEventListener('hashchange',handleRoute);
 
 // SHEETS API HELPERS
 async function sheetsAppend(sheetName,values){
-  if(!accessToken)return;
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(sheetName+'!A1')}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,{method:'POST',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},body:JSON.stringify({values})}).catch(e=>console.error('sheetsAppend error:',e));
+  if(!adminAccessToken)return;
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(sheetName+'!A1')}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,{method:'POST',headers:{Authorization:'Bearer '+adminAccessToken,'Content-Type':'application/json'},body:JSON.stringify({values})}).catch(e=>console.error('sheetsAppend error:',e));
 }
 async function sheetsGetValues(range){
-  if(!accessToken)return null;
-  return fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`,{headers:{Authorization:'Bearer '+accessToken}}).then(r=>r.json()).catch(()=>null);
+  if(!adminAccessToken)return null;
+  const data=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`,{headers:{Authorization:'Bearer '+adminAccessToken}}).then(r=>r.json()).catch(()=>null);
+  return (data&&!data.error)?data:null;
 }
 async function sheetsBatchUpdate(requests){
-  if(!accessToken)return;
-  return fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`,{method:'POST',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},body:JSON.stringify({requests})}).then(r=>r.json()).catch(e=>console.error('batchUpdate error:',e));
+  if(!adminAccessToken)return;
+  return fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`,{method:'POST',headers:{Authorization:'Bearer '+adminAccessToken,'Content-Type':'application/json'},body:JSON.stringify({requests})}).then(r=>r.json()).catch(e=>console.error('batchUpdate error:',e));
 }
 async function sheetsUpdate(range,values){
-  if(!accessToken)return;
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,{method:'PUT',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},body:JSON.stringify({values})}).catch(e=>console.error('sheetsUpdate error:',e));
+  if(!adminAccessToken)return;
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,{method:'PUT',headers:{Authorization:'Bearer '+adminAccessToken,'Content-Type':'application/json'},body:JSON.stringify({values})}).catch(e=>console.error('sheetsUpdate error:',e));
 }
 
 async function initDataSheets(){
-  if(!accessToken)return;
+  if(!adminAccessToken)return;
   try{
-    const meta=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`,{headers:{Authorization:'Bearer '+accessToken}}).then(r=>r.json());
+    const meta=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`,{headers:{Authorization:'Bearer '+adminAccessToken}}).then(r=>r.json());
     const titles=(meta.sheets||[]).map(s=>s.properties.title);
 
     // ── 커미션 시트 ──
     if(!titles.includes(COMM_SHEET)){
       await sheetsBatchUpdate([{addSheet:{properties:{title:COMM_SHEET}}}]);
       await sheetsUpdate(COMM_SHEET+'!A1',[
-        ['code','bsp','over','soto','reissue','chd','inf','notes'],
-        ...airlines.map(a=>[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes])
+        ['code','bsp','over','soto','reissue','chd','inf','notes','images'],
+        ...airlines.map(a=>[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,'[]'])
       ]);
     } else {
-      const d=await sheetsGetValues(COMM_SHEET+'!A:H');
+      const d=await sheetsGetValues(COMM_SHEET+'!A:I');
       if(d&&d.values&&d.values.length>1){
         d.values.slice(1).forEach(row=>{
           if(!row[0])return;
@@ -469,6 +471,7 @@ async function initDataSheets(){
             if(row[5]!==undefined)a.chd=row[5];
             if(row[6]!==undefined)a.inf=row[6];
             if(row[7]!==undefined)a.notes=row[7];
+            if(row[8]){try{a.images=JSON.parse(row[8]);}catch(e){}}
           }
         });
       }
@@ -494,9 +497,9 @@ async function initDataSheets(){
 }
 
 async function initAuditSheet(){
-  if(!accessToken)return;
+  if(!adminAccessToken)return;
   try{
-    const meta=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`,{headers:{Authorization:'Bearer '+accessToken}}).then(r=>r.json());
+    const meta=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`,{headers:{Authorization:'Bearer '+adminAccessToken}}).then(r=>r.json());
     const exists=(meta.sheets||[]).some(s=>s.properties.title===AUDIT_SHEET_NAME);
     if(!exists){
       await sheetsBatchUpdate([{addSheet:{properties:{title:AUDIT_SHEET_NAME,gridProperties:{rowCount:2000,columnCount:8}}}}]);
@@ -505,12 +508,12 @@ async function initAuditSheet(){
   }catch(e){console.error('initAuditSheet error:',e);}
 }
 async function appendAuditLog(code,field,before,after){
-  if(!accessToken||!currentUser)return;
+  if(!adminAccessToken||!currentUser)return;
   const now=new Date().toLocaleString('ko-KR',{timeZone:'Asia/Seoul'});
   await sheetsAppend(AUDIT_SHEET_NAME,[[now,currentUser.name,currentUser.email,code,field,String(before),String(after)]]);
 }
 async function loadAuditLog(code){
-  if(!accessToken)return[];
+  if(!accessToken&&!adminAccessToken)return[];
   const data=await sheetsGetValues(AUDIT_SHEET_NAME+'!A:G');
   if(!data||!data.values)return[];
   const rows=data.values.slice(1);
@@ -528,6 +531,7 @@ async function handleFileUpload(code,input){
     if(!a.images)a.images=[];
     a.images.push(uploaded);
     appendAuditLog(code,'파일추가','-',uploaded.label);
+    await saveImages(code);
     renderDetail(code);
     showToast('파일이 업로드되었습니다','success');
   }catch(e){
@@ -539,14 +543,14 @@ async function handleFileUpload(code,input){
   }
 }
 async function uploadFileToDrive(file,code){
-  if(!accessToken)throw new Error('로그인이 필요합니다');
+  if(!adminAccessToken)throw new Error('관리자 권한이 필요합니다');
   const metadata={name:`[${code}] ${file.name}`};
   const form=new FormData();
   form.append('metadata',new Blob([JSON.stringify(metadata)],{type:'application/json'}));
   form.append('file',file);
-  const res=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType',{method:'POST',headers:{Authorization:'Bearer '+accessToken},body:form}).then(r=>r.json());
+  const res=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType',{method:'POST',headers:{Authorization:'Bearer '+adminAccessToken},body:form}).then(r=>r.json());
   if(!res.id)throw new Error(res.error?.message||'Upload failed');
-  await fetch(`https://www.googleapis.com/drive/v3/files/${res.id}/permissions`,{method:'POST',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},body:JSON.stringify({role:'reader',type:'anyone'})});
+  await fetch(`https://www.googleapis.com/drive/v3/files/${res.id}/permissions`,{method:'POST',headers:{Authorization:'Bearer '+adminAccessToken,'Content-Type':'application/json'},body:JSON.stringify({role:'reader',type:'anyone'})});
   return{id:res.id,label:file.name,url:`https://drive.google.com/uc?id=${res.id}`,viewUrl:`https://drive.google.com/file/d/${res.id}/view`,mimeType:file.type};
 }
 function removeFile(code,idx){
@@ -554,6 +558,7 @@ function removeFile(code,idx){
   const removed=a.images[idx];
   a.images.splice(idx,1);
   if(removed)appendAuditLog(code,'파일삭제',removed.label,'-');
+  saveImages(code);
   renderDetail(code);
   showToast('파일이 삭제되었습니다');
 }
@@ -690,7 +695,7 @@ function loadEmbeddedData(){
     {code:"LA",bsp:"0",over:"3",soto:"3",reissue:"0",chd:"0",inf:"0",notes:"- 적용 기간: ~6/30 (3분기에 연장 확인)\n- 출발 기간: ~27/06/30\n- 적용 노선: Long haul 구간\nex) 아시아-남미 v.v, 북미-남미v.v, 유럽-남미v.v, 대양주-남미v.v, 멕시코-남미v.v\n- Long haul 포함 LATAM 항공 Thru fare 사용한 경우\n- Long haul 구간 SOTO 발권한 경우\n- CHD 오버컴 가능\n- Domestic(국내선) 및 Regional (남미 내 이동) SOTO 발권의 경우 적용 불가\n- B2B 적용 불가\n- 투어코드 및 커미션 지급률\n* J Cabin Only: 5% / Tourcode: ODKRI89606\n* J+Y, J+W: 3% / Tourcode: ODKRI89607\n* Y, W cabin: 3% / Tourcode: ODKRI89607",images:[]},
     {code:"LH",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
     {code:"LJ",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
-    {code:"LO",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"- 적용 기간: ~26/3/31\n- 출발 기간: ~26/3/31\n- 적용 노선: WRO/WAW 제외 전 노선 적용 가능\n* WRO/WAW 포함 시 적용 불가 (단, 단순경유인 경우 포함 가능)\n> EX) ICN-WAW-PRG\n- 적용 클래스: 전 클래스 (단, G,N,I,J, 그룹 제외)\n- SOTO 적용\n- ADT/CHD 적용",images:[]},
+    {code:"LO",bsp:"0",over:"3",soto:"0",reissue:"0",chd:"3",inf:"0",notes:"- 적용 기간: ~26/7/5\n- 출발 기간: ~26/8/31\n- 적용 노선: WRO/WAW 직항 포함 전 노선\n- 적용 클래스: 전 클래스 (단, G,N,I,J, 그룹 제외)\n- SOTO 적용\n- ADT/CHD 적용",images:[]},
     {code:"LX",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"KE@A",images:[]},
     {code:"LY",bsp:"0",over:"0",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"COM@A",images:[]},
     {code:"MH",bsp:"0",over:"3",soto:"0",reissue:"0",chd:"0",inf:"0",notes:"- 적용 기간: ~26/12/31\n- 적용 노선: ICN 출발 MH 운항노선\n- SOTO 오버컴 미적용\n- ADT/CHD/INF 오버컴 적용\n- 환불 시 COMM, RECALL과 함께 환불\n- 커미션 3% 수동 입력 필요",images:[]},
@@ -747,7 +752,8 @@ function loadEmbeddedData(){
     {code:"ZH",route:"한국-중국/국내선루팅",bsp:"0%",overEY:"5%",overBZ:"",ticketing:"2025.07.01~2025.12.31",departure:"",notes:"479 ZH스탁/현금만",accountCode:"",b2g:false},
     {code:"ZH",route:"한국-중국/국제선루팅",bsp:"0%",overEY:"8%",overBZ:"",ticketing:"2025.07.01~2025.12.31",departure:"",notes:"",accountCode:"",b2g:false},
     {code:"LA",route:"Long haul (LA Stock)",bsp:"0%",overEY:"EY3%/BZ5%",overBZ:"",ticketing:"2026.04.01~2026.06.30",departure:"2026.04.01~2027.06.30",notes:"J:5%/ODKRI89606. Y,W:3%/ODKRI89607",accountCode:"",b2g:false},
-    {code:"LO",route:"인천출발/도착(SOTO포함)",bsp:"0%",overEY:"2%",overBZ:"",ticketing:"2026.02.25~2026.03.31",departure:"2026.02.25~2026.03.31",notes:"WRO/WAW 제외. SOTO/CHL 가능",accountCode:"",b2g:false},
+    {code:"LO",route:"인천출발/도착(SOTO포함)",bsp:"0%",overEY:"2%",overBZ:"",ticketing:"2026.02.25~2026.03.31",departure:"2026.02.25~2026.03.31",notes:"WRO/WAW 제외. SOTO/CHD 가능",accountCode:"",b2g:false},
+    {code:"LO",route:"인천 출발/도착 (현지 출발 SOTO 포함)",bsp:"0%",overEY:"3%",overBZ:"",ticketing:"2026.06.08~2026.07.05",departure:"~2026.08.31",notes:"WRO/WAW 직항 포함 전 노선. 전 클래스(G,N,I,J,그룹 제외). SOTO 적용. ADT/CHD 적용",accountCode:"",b2g:false},
     {code:"ET",route:"인천 출발-ET 취항지",bsp:"5%",overEY:"3%",overBZ:"",ticketing:"2025.05.13~2026.06.30",departure:"",notes:"C/Y-Class. 기본컴+3% 추가. 유아 가능",accountCode:"",b2g:false},
     {code:"9G",route:"ICN-PQC",bsp:"0%",overEY:"3%",overBZ:"",ticketing:"2026.03.11~",departure:"",notes:"지정대리점 커미션. CHD/INF 적용",accountCode:"",b2g:false},
     {code:"MH",route:"한국출발 (EY)",bsp:"0%",overEY:"3%",overBZ:"",ticketing:"2025.09.15~2026.12.31",departure:"2025.09.15~",notes:"적용노선\n1. 한국발 MH 운항노선\n\n유의사항\n* All fare with KR in the fare basis\n* SOTO 적용 불가\n* 커미션 3% 수동 입력\n* 환불 시 COMM, RECALL과 함께 환불\n* 1년 연장되어 26년 12월 31일까지 적용",accountCode:"",b2g:false},
@@ -918,12 +924,12 @@ function renderDetail(code){
       <div id="archiveFilesGrid" class="img-grid">
         ${(a.images&&a.images.length)?a.images.map((img,i)=>`
           <div class="img-item" style="position:relative">
-            ${img.mimeType&&img.mimeType.includes('pdf')?
-              `<div style="height:120px;background:#FFF5F5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px">
-                 <span style="font-size:32px">📄</span>
-                 <span style="font-size:10px;color:#888">PDF</span>
-               </div>`:
-              `<img src="${img.url}" alt="${img.label}" style="width:100%;height:120px;object-fit:cover" onclick="openImgModal('${img.url}','${img.label}')">`
+            ${(img.mimeType&&img.mimeType.startsWith('image/'))?
+              `<img src="${img.url}" alt="${img.label}" data-viewurl="${img.viewUrl||img.url}" style="width:100%;height:120px;object-fit:cover;border-radius:6px 6px 0 0" onclick="openImgModal('${img.url}','${img.label}')" onerror="onImgError(this)">`:
+              `<a href="${img.viewUrl||img.url}" target="_blank" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:120px;background:#F0F4FF;border-radius:6px 6px 0 0;text-decoration:none">
+                 <span style="font-size:26px">📄</span>
+                 <span style="font-size:11px;font-weight:600;color:#3B4A6B;text-align:center;padding:0 8px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;line-height:1.4;word-break:break-all">${img.label}</span>
+               </a>`
             }
             <div class="img-label" style="display:flex;align-items:center;gap:4px">
               <a href="${img.viewUrl||img.url}" target="_blank" style="flex:1;color:#0066FF;text-decoration:none;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${img.label}</a>
@@ -1022,7 +1028,7 @@ function addHistRow(code){historyData.push({code,route:'',bsp:'',overEY:'',overB
 function removeHistRow(i){historyData.splice(i,1);const code=document.getElementById('adminAirlineSelect').value;loadAdminAirline(code);}
 
 async function saveAirline(code){
-  if(!accessToken){requestAdminAccess(()=>saveAirline(code));return;}
+  if(!adminAccessToken){requestAdminAccess(()=>saveAirline(code));return;}
   const a=airlines.find(x=>x.code===code);if(!a)return;
   const old={bsp:a.bsp,over:a.over,soto:a.soto,reissue:a.reissue,chd:a.chd,inf:a.inf,notes:a.notes};
   a.bsp=document.getElementById('ed-bsp').value;
@@ -1040,10 +1046,10 @@ async function saveAirline(code){
 
   // Sheets에 커미션 데이터 반영
   const commData=await sheetsGetValues(COMM_SHEET+'!A:A');
-  if(commData&&commData.values){
-    const rowIdx=commData.values.findIndex(r=>r[0]===code);
-    if(rowIdx>0)await sheetsUpdate(COMM_SHEET+`!A${rowIdx+1}:H${rowIdx+1}`,[[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes]]);
-  }
+  if(!commData||!commData.values){showToast(`${code} 저장 실패: 시트 읽기 오류`,'error');return;}
+  const rowIdx=commData.values.findIndex(r=>r[0]===code);
+  if(rowIdx<=0){showToast(`${code} 저장 실패: 항공사 행을 찾을 수 없음`,'error');return;}
+  await sheetsUpdate(COMM_SHEET+`!A${rowIdx+1}:I${rowIdx+1}`,[[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,JSON.stringify(a.images||[])]]);
 
   // Sheets에 히스토리 전체 재기록
   await sheetsUpdate(HIST_SHEET+'!A1',[
@@ -1059,6 +1065,23 @@ async function saveAirline(code){
 function addImage(code){const a=airlines.find(x=>x.code===code);if(!a)return;const url=document.getElementById('newImgUrl').value.trim(),label=document.getElementById('newImgLabel').value.trim()||'이미지';if(!url){showToast('URL을 입력하세요','error');return;}let directUrl=url;const dm=url.match(/\/d\/([a-zA-Z0-9_-]+)/);if(dm)directUrl=`https://drive.google.com/uc?id=${dm[1]}`;if(!a.images)a.images=[];a.images.push({url:directUrl,label});loadAdminAirline(code);showToast('이미지가 추가되었습니다','success');}
 function removeImage(code,i){const a=airlines.find(x=>x.code===code);if(a&&a.images){a.images.splice(i,1);loadAdminAirline(code);}}
 function updateImgLabel(code,i,v){const a=airlines.find(x=>x.code===code);if(a&&a.images&&a.images[i])a.images[i].label=v;}
+async function saveImages(code){
+  if(!adminAccessToken)return;
+  const a=airlines.find(x=>x.code===code);if(!a)return;
+  const commData=await sheetsGetValues(COMM_SHEET+'!A:A');
+  if(commData&&commData.values){
+    const rowIdx=commData.values.findIndex(r=>r[0]===code);
+    if(rowIdx>0)await sheetsUpdate(COMM_SHEET+`!I${rowIdx+1}`,[[JSON.stringify(a.images||[])]]);
+  }
+}
+function onImgError(el){
+  const label=el.alt, href=el.dataset.viewurl||el.src;
+  const card=document.createElement('a');
+  card.href=href; card.target='_blank';
+  card.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:120px;background:#FFF5F5;text-decoration:none';
+  card.innerHTML=`<span style="font-size:32px">📄</span><span style="font-size:10px;color:#555;text-align:center;padding:0 6px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${label}</span>`;
+  el.parentNode.replaceChild(card,el);
+}
 function openSheetDirect(){window.open(SHEET_URL,'_blank');}
 
 // UTILS
