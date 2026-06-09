@@ -366,7 +366,7 @@ let pendingAdminSave=null;
 async function requestAdminAccess(callback){
   if(adminAccessToken){callback();return;}
   pendingAdminSave=callback;
-  adminTokenClient.requestAccessToken({prompt:'select_account'});
+  adminTokenClient.requestAccessToken();
 }
 async function handleToken(resp){
   if(resp.error){showToast('로그인 실패','error');return;}
