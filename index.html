@@ -61,6 +61,8 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
 .badge.over{background:#E6F9F0;color:#006644}
 .badge.nocom{background:#F3F3F3;color:#AAA}
 .badge.b2g{background:#F3EEFF;color:#6B46C1}
+.badge.expiring{background:#FFF3CD;color:#B45309}
+.badge.expire{background:#FFE8E8;color:#CC0000}
 .card-rates{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:0 16px 10px}
 .rate{text-align:center;padding:7px;background:#F7F8FA;border-radius:7px}
 .rate .rl{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.3px}
@@ -783,6 +785,25 @@ function loadEmbeddedData(){
 
 // RENDER HELPERS
 function gn(v){return parseFloat(String(v).replace(/[^0-9.]/g,''))||0;}
+function parseEndDate(notes){
+  if(!notes)return null;
+  const m1=notes.match(/~(\d{4})\.(\d{1,2})\.(\d{1,2})/);
+  if(m1)return new Date(parseInt(m1[1]),parseInt(m1[2])-1,parseInt(m1[3]));
+  const m2=notes.match(/~(\d{2})\.(\d{1,2})\.(\d{1,2})/);
+  if(m2)return new Date(2000+parseInt(m2[1]),parseInt(m2[2])-1,parseInt(m2[3]));
+  const m3=notes.match(/~(\d{1,2})\/(\d{1,2})/);
+  if(m3)return new Date(new Date().getFullYear(),parseInt(m3[1])-1,parseInt(m3[2]));
+  return null;
+}
+function getExpiryBadge(a){
+  const end=parseEndDate(a.notes);
+  if(!end)return'';
+  const now=new Date(),cy=now.getFullYear(),cm=now.getMonth();
+  const ey=end.getFullYear(),em=end.getMonth();
+  if(ey<cy||(ey===cy&&em<cm))return'<span class="badge expire">확인필요 ⚠</span>';
+  if(ey===cy&&em===cm)return'<span class="badge expiring">이달마감 ⚠</span>';
+  return'';
+}
 
 function toggleAcctCard(id, btn) {
   const el = document.getElementById(id);
@@ -857,7 +878,7 @@ function renderCards(){
     lv.innerHTML=`<table class="list-tbl"><thead><tr><th>항공사</th><th>BSP컴</th><th>오버컴</th><th>SOTO</th><th>재발행</th><th>소아</th><th>유아</th><th>비고</th></tr></thead><tbody>${list.map(a=>{
       const bn=gn(a.bsp),on=gn(a.over);
       return`<tr onclick="navigate('detail','${encodeURIComponent(a.code)}')">
-        <td style="font-weight:800;font-size:15px">${a.code}</td>
+        <td style="font-weight:800;font-size:15px">${a.code}${getExpiryBadge(a)?`<br><span style="font-size:10px">${getExpiryBadge(a)}</span>`:''}</td>
         <td class="cv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</td>
         <td class="cv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</td>
         <td class="cv">${fmtRate(a.soto)}</td>
@@ -877,6 +898,7 @@ function renderCards(){
     if(bn>0)badges.push(`<span class="badge bsp">BSP ${fmtRate(a.bsp)}</span>`);
     if(on>0)badges.push(`<span class="badge over">오버컴 ${fmtRate(a.over)}</span>`);
     if(!bn&&!on)badges.push(`<span class="badge nocom">노컴</span>`);
+    const expiryBadge=getExpiryBadge(a);if(expiryBadge)badges.push(expiryBadge);
     const acct=getAccountCode(a.code);
     const acctHtml=acct?renderAccountCodeCard(acct,a.code):'';
     return`<div class="card ${cls}" onclick="navigate('detail','${encodeURIComponent(a.code)}')"><div class="card-top"><span class="card-code">${a.code}</span><div class="badges">${badges.join('')}</div></div><div class="card-rates"><div class="rate"><div class="rl">BSP</div><div class="rv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</div></div><div class="rate"><div class="rl">오버컴</div><div class="rv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div><div class="rate"><div class="rl">SOTO</div><div class="rv ${gn(a.soto)>0?'hi':'ze'}">${fmtRate(a.soto)}</div></div></div><div class="card-tags"><div class="tag">재발행 <b>${fmtRate(a.reissue)}</b></div><div class="tag">소아 <b>${fmtRate(a.chd)}</b></div><div class="tag">유아 <b>${fmtRate(a.inf)}</b></div></div>${acctHtml}<div class="card-arrow">상세 보기 →</div></div>`;
@@ -891,6 +913,7 @@ function renderDetail(code){
   if(bn>0)badges.push(`<span class="badge bsp">BSP ${fmtRate(a.bsp)}</span>`);
   if(on>0)badges.push(`<span class="badge over">오버컴 ${fmtRate(a.over)}</span>`);
   if(!bn&&!on)badges.push(`<span class="badge nocom">노컴</span>`);
+  const eb=getExpiryBadge(a);if(eb)badges.push(eb);
   document.getElementById('detailBadges').innerHTML=badges.join('');
   const hist=historyData.filter(h=>h.code===code);
 
