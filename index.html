@@ -378,16 +378,17 @@ async function handleToken(resp){
   document.getElementById('loginScreen').style.display='none';
   updateAuthUI();
   renderStats();renderCards();
+  showToast(info.name+'님 환영합니다','success');
+  await loadSheetsData();
+  renderStats();renderCards();
   if(isAdmin){
     requestAdminAccess(async()=>{
       await initDataSheets();
       await initAuditSheet();
-      renderStats();renderCards();
       if(location.hash==='#admin')showAdminPanel();
     });
   }
   if(location.hash==='#admin'&&isAdmin)showAdminPanel();
-  showToast(info.name+'님 환영합니다','success');
 }
 function googleLogin(){
   if(!tokenClient){showToast('잠시 후 다시 시도하세요','error');return;}
@@ -435,6 +436,19 @@ async function sheetsGetValues(range){
   const data=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`,{headers:{Authorization:'Bearer '+adminAccessToken}}).then(r=>r.json()).catch(()=>null);
   return (data&&!data.error)?data:null;
 }
+async function sheetsGetValuesPublic(sheetName){
+  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=0&sheet=${encodeURIComponent(sheetName)}`;
+  try{
+    const resp=await fetch(url);
+    if(!resp.ok)return null;
+    const text=await resp.text();
+    const jsonStr=text.replace(/^[^(]+\(/,'').replace(/\);\s*$/,'');
+    const json=JSON.parse(jsonStr);
+    if(!json.table||!json.table.rows)return null;
+    const values=json.table.rows.map(row=>(row.c||[]).map(cell=>(cell&&cell.v!==null&&cell.v!==undefined)?String(cell.v):''));
+    return {values};
+  }catch(e){console.error('sheetsGetValuesPublic error:',e);return null;}
+}
 async function sheetsBatchUpdate(requests){
   if(!adminAccessToken)return;
   return fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`,{method:'POST',headers:{Authorization:'Bearer '+adminAccessToken,'Content-Type':'application/json'},body:JSON.stringify({requests})}).then(r=>r.json()).catch(e=>console.error('batchUpdate error:',e));
@@ -444,54 +458,52 @@ async function sheetsUpdate(range,values){
   await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,{method:'PUT',headers:{Authorization:'Bearer '+adminAccessToken,'Content-Type':'application/json'},body:JSON.stringify({values})}).catch(e=>console.error('sheetsUpdate error:',e));
 }
 
+async function loadSheetsData(){
+  try{
+    const d=await sheetsGetValuesPublic(COMM_SHEET);
+    if(d&&d.values&&d.values.length>1){
+      d.values.slice(1).forEach(row=>{
+        if(!row[0])return;
+        const a=airlines.find(x=>x.code===row[0]);
+        if(a){
+          if(row[1]!==undefined)a.bsp=row[1];
+          if(row[2]!==undefined)a.over=row[2];
+          if(row[3]!==undefined)a.soto=row[3];
+          if(row[4]!==undefined)a.reissue=row[4];
+          if(row[5]!==undefined)a.chd=row[5];
+          if(row[6]!==undefined)a.inf=row[6];
+          if(row[7]!==undefined)a.notes=row[7];
+          if(row[8]){try{a.images=JSON.parse(row[8]);}catch(e){}}
+        }
+      });
+    }
+    const h=await sheetsGetValuesPublic(HIST_SHEET);
+    if(h&&h.values&&h.values.length>1){
+      historyData=h.values.slice(1).filter(r=>r[0]).map(r=>({
+        code:r[0]||'',route:r[1]||'',bsp:r[2]||'',overEY:r[3]||'',overBZ:r[4]||'',
+        ticketing:r[5]||'',departure:r[6]||'',notes:r[7]||'',accountCode:r[8]||'',b2g:false
+      }));
+    }
+  }catch(e){console.error('loadSheetsData error:',e);}
+}
 async function initDataSheets(){
   if(!adminAccessToken)return;
   try{
     const meta=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`,{headers:{Authorization:'Bearer '+adminAccessToken}}).then(r=>r.json());
     const titles=(meta.sheets||[]).map(s=>s.properties.title);
-
-    // ── 커미션 시트 ──
     if(!titles.includes(COMM_SHEET)){
       await sheetsBatchUpdate([{addSheet:{properties:{title:COMM_SHEET}}}]);
       await sheetsUpdate(COMM_SHEET+'!A1',[
         ['code','bsp','over','soto','reissue','chd','inf','notes','images'],
         ...airlines.map(a=>[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,'[]'])
       ]);
-    } else {
-      const d=await sheetsGetValues(COMM_SHEET+'!A:I');
-      if(d&&d.values&&d.values.length>1){
-        d.values.slice(1).forEach(row=>{
-          if(!row[0])return;
-          const a=airlines.find(x=>x.code===row[0]);
-          if(a){
-            if(row[1]!==undefined)a.bsp=row[1];
-            if(row[2]!==undefined)a.over=row[2];
-            if(row[3]!==undefined)a.soto=row[3];
-            if(row[4]!==undefined)a.reissue=row[4];
-            if(row[5]!==undefined)a.chd=row[5];
-            if(row[6]!==undefined)a.inf=row[6];
-            if(row[7]!==undefined)a.notes=row[7];
-            if(row[8]){try{a.images=JSON.parse(row[8]);}catch(e){}}
-          }
-        });
-      }
     }
-
-    // ── 히스토리 시트 ──
     if(!titles.includes(HIST_SHEET)){
       await sheetsBatchUpdate([{addSheet:{properties:{title:HIST_SHEET}}}]);
       await sheetsUpdate(HIST_SHEET+'!A1',[
         ['code','route','bsp','overEY','overBZ','ticketing','departure','notes','accountCode'],
         ...historyData.map(h=>[h.code,h.route,h.bsp,h.overEY,h.overBZ||'',h.ticketing,h.departure,h.notes,h.accountCode||''])
       ]);
-    } else {
-      const d=await sheetsGetValues(HIST_SHEET+'!A:I');
-      if(d&&d.values&&d.values.length>1){
-        historyData=d.values.slice(1).filter(r=>r[0]).map(r=>({
-          code:r[0]||'',route:r[1]||'',bsp:r[2]||'',overEY:r[3]||'',overBZ:r[4]||'',
-          ticketing:r[5]||'',departure:r[6]||'',notes:r[7]||'',accountCode:r[8]||'',b2g:false
-        }));
-      }
     }
   }catch(e){console.error('initDataSheets error:',e);}
 }
