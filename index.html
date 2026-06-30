@@ -1088,8 +1088,8 @@ async function saveAirline(code){
   renderStats();renderCards();
   showToast(`${code} 저장 중...`,'');
 
-  // Sheets에 커미션 데이터 반영
-  const commData=await sheetsGetValues(COMM_SHEET+'!A:A');
+  // Sheets에 커미션 데이터 반영 (읽기는 공개 엔드포인트 사용)
+  const commData=await sheetsGetValuesPublic(COMM_SHEET);
   if(!commData||!commData.values){showToast(`${code} 저장 실패: 시트 읽기 오류`,'error');return;}
   const rowIdx=commData.values.findIndex(r=>r[0]===code);
   if(rowIdx<=0){showToast(`${code} 저장 실패: 항공사 행을 찾을 수 없음`,'error');return;}
@@ -1112,7 +1112,7 @@ function updateImgLabel(code,i,v){const a=airlines.find(x=>x.code===code);if(a&&
 async function saveImages(code){
   if(!adminAccessToken)return;
   const a=airlines.find(x=>x.code===code);if(!a)return;
-  const commData=await sheetsGetValues(COMM_SHEET+'!A:A');
+  const commData=await sheetsGetValuesPublic(COMM_SHEET);
   if(commData&&commData.values){
     const rowIdx=commData.values.findIndex(r=>r[0]===code);
     if(rowIdx>0)await sheetsUpdate(COMM_SHEET+`!I${rowIdx+1}`,[[JSON.stringify(a.images||[])]]);
