@@ -1079,9 +1079,6 @@ function removeHistRow(i){historyData.splice(i,1);const code=document.getElement
 
 async function saveAirline(code){
   if(!adminAccessToken){requestAdminAccess(()=>saveAirline(code));return;}
-  // 토큰 유효성 확인 - 만료 시 재발급 후 재시도
-  const tokenCheck=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=spreadsheetId`,{headers:{Authorization:'Bearer '+adminAccessToken}}).then(r=>r.json()).catch(()=>({error:true}));
-  if(tokenCheck.error||tokenCheck.error){adminAccessToken=null;requestAdminAccess(()=>saveAirline(code));return;}
   const a=airlines.find(x=>x.code===code);if(!a)return;
   const old={bsp:a.bsp,over:a.over,soto:a.soto,reissue:a.reissue,chd:a.chd,inf:a.inf,notes:a.notes};
   a.bsp=document.getElementById('ed-bsp').value;
