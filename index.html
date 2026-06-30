@@ -788,12 +788,18 @@ function loadEmbeddedData(){
 function gn(v){return parseFloat(String(v).replace(/[^0-9.]/g,''))||0;}
 function parseEndDate(notes){
   if(!notes)return null;
+  // ~2026.08.31
   const m1=notes.match(/~(\d{4})\.(\d{1,2})\.(\d{1,2})/);
   if(m1)return new Date(parseInt(m1[1]),parseInt(m1[2])-1,parseInt(m1[3]));
+  // ~26.8.31
   const m2=notes.match(/~(\d{2})\.(\d{1,2})\.(\d{1,2})/);
   if(m2)return new Date(2000+parseInt(m2[1]),parseInt(m2[2])-1,parseInt(m2[3]));
-  const m3=notes.match(/~(\d{1,2})\/(\d{1,2})/);
-  if(m3)return new Date(new Date().getFullYear(),parseInt(m3[1])-1,parseInt(m3[2]));
+  // ~26/6/30 or ~26/06/30
+  const m3=notes.match(/~(\d{2})\/(\d{1,2})\/(\d{1,2})/);
+  if(m3)return new Date(2000+parseInt(m3[1]),parseInt(m3[2])-1,parseInt(m3[3]));
+  // ~8/31
+  const m4=notes.match(/~(\d{1,2})\/(\d{1,2})/);
+  if(m4)return new Date(new Date().getFullYear(),parseInt(m4[1])-1,parseInt(m4[2]));
   return null;
 }
 function getExpiryBadge(a){
