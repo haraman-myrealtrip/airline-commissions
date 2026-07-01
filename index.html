@@ -361,6 +361,7 @@ function handleAdminToken(resp){
   if(resp.error){showToast('권한 요청 실패','error');return;}
   adminAccessToken=resp.access_token;
   showToast('저장 권한이 확인되었습니다','success');
+  initDataSheets();initAuditSheet();  // 시트 최초 1회 생성 보장(이미 있으면 no-op)
   pendingAdminSave&&pendingAdminSave();
   pendingAdminSave=null;
 }
@@ -377,20 +378,14 @@ async function handleToken(resp){
   if(!ALLOWED_DOMAINS.some(d=>info.email.endsWith('@'+d))){showToast('@myrealtrip.com 또는 @aicx.kr 계정만 가능','error');accessToken=null;return;}
   currentUser={name:info.name,email:info.email};
   isAdmin=ADMIN_EMAILS.includes(info.email);
+  try{localStorage.setItem('cds_user',JSON.stringify(currentUser));}catch(e){}
   document.getElementById('loginScreen').style.display='none';
   updateAuthUI();
   renderStats();renderCards();
   showToast(info.name+'님 환영합니다','success');
-  if(isAdmin){
-    requestAdminAccess(async()=>{
-      await initDataSheets();
-      await initAuditSheet();
-      renderStats();renderCards();
-      if(location.hash==='#admin')showAdminPanel();
-    });
-  }
+  // 관리자 저장 권한(Sheets 쓰기 스코프)은 실제로 '저장'을 누를 때만 요청 → 로그인 시 이중 팝업 제거
   if(location.hash==='#admin'&&isAdmin)showAdminPanel();
-  loadSheetsData().then(()=>{renderStats();renderCards();});
+  refreshData();startAutoSync();
 }
 function googleLogin(){
   if(!tokenClient){showToast('잠시 후 다시 시도하세요','error');return;}
@@ -400,6 +395,8 @@ function logout(){
   if(accessToken&&currentUser){google.accounts.oauth2.revoke(accessToken,()=>{});}
   if(adminAccessToken){google.accounts.oauth2.revoke(adminAccessToken,()=>{});}
   accessToken=null;adminAccessToken=null;currentUser=null;isAdmin=false;
+  try{localStorage.removeItem('cds_user');}catch(e){}
+  stopAutoSync();
   document.getElementById('loginScreen').style.display='flex';
   updateAuthUI();
   if(location.hash==='#admin'){document.getElementById('adminLoginPrompt').style.display='block';document.getElementById('adminPanel').classList.remove('visible');}
@@ -408,7 +405,8 @@ function updateAuthUI(){
   const n=document.getElementById('navRight');
   if(currentUser){
     const i=currentUser.name.split(' ').map(x=>x[0]).join('').substring(0,2);
-    n.innerHTML=`<span class="user">${currentUser.email}</span><div class="avatar">${i}</div><button class="btn-logout" onclick="logout()">로그아웃</button>`;
+    n.innerHTML=`<span class="user" id="syncLabel"></span><button class="btn-logout" onclick="manualRefresh()" title="구글시트에서 최신 데이터 불러오기">↻ 새로고침</button><span class="user">${currentUser.email}</span><div class="avatar">${i}</div><button class="btn-logout" onclick="logout()">로그아웃</button>`;
+    updateSyncLabel();
     document.getElementById('noticeBell').classList.add('visible');
   } else {
     n.innerHTML='<button class="btn-login" onclick="googleLogin()">Google 로그인</button>';
@@ -439,7 +437,7 @@ async function sheetsGetValues(range){
   return (data&&!data.error)?data:null;
 }
 async function sheetsGetValuesPublic(sheetName){
-  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=0&sheet=${encodeURIComponent(sheetName)}`;
+  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=0&sheet=${encodeURIComponent(sheetName)}&_cb=${Date.now()}`;
   try{
     const resp=await fetch(url);
     if(!resp.ok)return null;
@@ -469,6 +467,40 @@ async function sheetsBatchUpdate(requests){
 async function sheetsUpdate(range,values){
   if(!adminAccessToken)return;
   await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,{method:'PUT',headers:{Authorization:'Bearer '+adminAccessToken,'Content-Type':'application/json'},body:JSON.stringify({values})}).catch(e=>console.error('sheetsUpdate error:',e));
+}
+
+// REALTIME SYNC ─ 구글시트를 주기적으로 다시 읽어 대시보드에 반영 (읽기는 토큰 불필요)
+let lastSyncAt=null,syncTimer=null;
+async function refreshData(){
+  await loadSheetsData();
+  renderStats();renderCards();
+  const h=location.hash||'';
+  if(h.startsWith('#detail/'))renderDetail(decodeURIComponent(h.split('/')[1]));
+  lastSyncAt=new Date();updateSyncLabel();
+}
+function startAutoSync(){
+  if(syncTimer)return;
+  syncTimer=setInterval(()=>{
+    if(document.visibilityState!=='visible')return;   // 백그라운드 탭이면 skip
+    if(document.getElementById('ed-notes'))return;     // 관리자가 편집 중이면 skip
+    refreshData();
+  },60000);
+}
+function stopAutoSync(){if(syncTimer){clearInterval(syncTimer);syncTimer=null;}}
+function updateSyncLabel(){
+  const el=document.getElementById('syncLabel');
+  if(el)el.textContent=lastSyncAt?'↻ '+lastSyncAt.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})+' 동기화':'';
+}
+function manualRefresh(){showToast('동기화 중...','');refreshData().then(()=>showToast('최신 데이터로 동기화되었습니다','success'));}
+// 저장된 세션이 있으면 재로그인 없이 복원 (읽기 전용 열람은 토큰이 필요 없음)
+function restoreSession(){
+  let u=null;try{u=JSON.parse(localStorage.getItem('cds_user')||'null');}catch(e){}
+  if(!u||!u.email||!ALLOWED_DOMAINS.some(d=>u.email.endsWith('@'+d)))return;
+  currentUser=u;isAdmin=ADMIN_EMAILS.includes(u.email);
+  document.getElementById('loginScreen').style.display='none';
+  updateAuthUI();
+  if(location.hash==='#admin'&&isAdmin)showAdminPanel();
+  refreshData();startAutoSync();
 }
 
 async function loadSheetsData(){
@@ -1160,7 +1192,9 @@ document.querySelectorAll('.view-btn').forEach(b=>b.addEventListener('click',()=
 }));
 
 // INIT
-loadEmbeddedData();renderStats();renderCards();handleRoute();initGoogleAuth();renderNotices();
+loadEmbeddedData();renderStats();renderCards();handleRoute();initGoogleAuth();renderNotices();restoreSession();
+// 탭이 다시 활성화되면 즉시 동기화 (편집 중이 아닐 때만)
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&currentUser&&!document.getElementById('ed-notes'))refreshData();});
 </script>
 </body>
 </html>
