@@ -63,6 +63,8 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
 .badge.b2g{background:#F3EEFF;color:#6B46C1}
 .badge.expiring{background:#FFF3CD;color:#B45309}
 .badge.expire{background:#FFE8E8;color:#CC0000}
+.badge.reissue-yes{background:#E6F9F0;color:#006644}
+.badge.reissue-no{background:#F3F3F3;color:#AAA}
 .card-rates{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:0 16px 10px}
 .rate{text-align:center;padding:7px;background:#F7F8FA;border-radius:7px}
 .rate .rl{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.3px}
@@ -335,6 +337,7 @@ const AUDIT_SHEET_NAME='변경이력';
 const COMM_SHEET='대시보드_커미션';
 const HIST_SHEET='대시보드_히스토리';
 const SUPER_ADMIN='haram.an@myrealtrip.com';
+const REISSUE_APPLICABLE=new Set(['BR','8M','NX','NH','VJ']);
 const ADMIN_EMAILS=['haram.an@myrealtrip.com','sieon.choi@myrealtrip.com','hyerim.kim@myrealtrip.com']; // 관리자 추가 시 여기에 이메일 추가
 
 let airlines=[],historyData=[],currentUser=null,isAdmin=false,currentFilter='over',currentSearch='',currentView='card';
@@ -867,6 +870,7 @@ function renderAccountCodeDetail(acct) {
   }).join('');
 }
 function fmtRate(v){const s=String(v);return s.includes('%')?s:s+'%';}
+function reissueTag(code){return REISSUE_APPLICABLE.has(code)?'<span class="badge reissue-yes">재발행 적용</span>':'<span class="badge reissue-no">재발행 미적용</span>';}
 function isActive(t){if(!t)return false;const m=t.match(/~\s*(\d{4})[\./]?(\d{1,2})[\./]?(\d{1,2})?/);if(m)return new Date(parseInt(m[1]),parseInt(m[2])-1,parseInt(m[3]||'28'))>=new Date();return t.includes('2026')||t.includes('2027');}
 function getAccountCode(code){const h=historyData.find(x=>x.code===code&&x.accountCode&&isActive(x.ticketing));return h?h.accountCode:null;}
 function copyAccountCode(val,btn){navigator.clipboard.writeText(val).then(()=>{btn.textContent='복사됨';btn.classList.add('copied');setTimeout(()=>{btn.textContent='복사';btn.classList.remove('copied');},1500);});}
@@ -900,7 +904,7 @@ function renderCards(){
         <td class="cv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</td>
         <td class="cv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</td>
         <td class="cv">${fmtRate(a.soto)}</td>
-        <td class="cv">${fmtRate(a.reissue)}</td>
+        <td class="cv">${reissueTag(a.code)}</td>
         <td class="cv">${fmtRate(a.chd)}</td>
         <td class="cv">${fmtRate(a.inf)}</td>
         <td style="font-size:12px;color:#555;max-width:280px">${a.notes||'-'}</td>
@@ -919,7 +923,7 @@ function renderCards(){
     const expiryBadge=getExpiryBadge(a);if(expiryBadge)badges.push(expiryBadge);
     const acct=getAccountCode(a.code);
     const acctHtml=acct?renderAccountCodeCard(acct,a.code):'';
-    return`<div class="card ${cls}" onclick="navigate('detail','${encodeURIComponent(a.code)}')"><div class="card-top"><span class="card-code">${a.code}</span><div class="badges">${badges.join('')}</div></div><div class="card-rates"><div class="rate"><div class="rl">BSP</div><div class="rv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</div></div><div class="rate"><div class="rl">오버컴</div><div class="rv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div><div class="rate"><div class="rl">SOTO</div><div class="rv ${gn(a.soto)>0?'hi':'ze'}">${fmtRate(a.soto)}</div></div></div><div class="card-tags"><div class="tag">재발행 <b>${fmtRate(a.reissue)}</b></div><div class="tag">소아 <b>${fmtRate(a.chd)}</b></div><div class="tag">유아 <b>${fmtRate(a.inf)}</b></div></div>${acctHtml}<div class="card-arrow">상세 보기 →</div></div>`;
+    return`<div class="card ${cls}" onclick="navigate('detail','${encodeURIComponent(a.code)}')"><div class="card-top"><span class="card-code">${a.code}</span><div class="badges">${badges.join('')}</div></div><div class="card-rates"><div class="rate"><div class="rl">BSP</div><div class="rv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</div></div><div class="rate"><div class="rl">오버컴</div><div class="rv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div><div class="rate"><div class="rl">SOTO</div><div class="rv ${gn(a.soto)>0?'hi':'ze'}">${fmtRate(a.soto)}</div></div></div><div class="card-tags">${reissueTag(a.code)}<div class="tag">소아 <b>${fmtRate(a.chd)}</b></div><div class="tag">유아 <b>${fmtRate(a.inf)}</b></div></div>${acctHtml}<div class="card-arrow">상세 보기 →</div></div>`;
   }).join('');
 }
 
@@ -1007,7 +1011,7 @@ function renderDetail(code){
         <div class="rate-box"><div class="rb-label">BSP컴</div><div class="rb-value ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</div></div>
         <div class="rate-box"><div class="rb-label">오버컴</div><div class="rb-value ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div>
         <div class="rate-box"><div class="rb-label">SOTO</div><div class="rb-value ${gn(a.soto)>0?'hi':'ze'}">${fmtRate(a.soto)}</div></div>
-        <div class="rate-box"><div class="rb-label">재발행</div><div class="rb-value ${gn(a.reissue)>0?'hi':'ze'}">${fmtRate(a.reissue)}</div></div>
+        <div class="rate-box"><div class="rb-label">재발행</div><div class="rb-value" style="padding:0">${reissueTag(a.code)}</div></div>
         <div class="rate-box"><div class="rb-label">소아</div><div class="rb-value ${gn(a.chd)>0?'hi':'ze'}">${fmtRate(a.chd)}</div></div>
         <div class="rate-box"><div class="rb-label">유아</div><div class="rb-value ${gn(a.inf)>0?'hi':'ze'}">${fmtRate(a.inf)}</div></div>
       </div>${acctHtml}</div>
