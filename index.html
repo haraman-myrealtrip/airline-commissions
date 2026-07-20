@@ -339,6 +339,8 @@ const HIST_SHEET='대시보드_히스토리';
 const SUPER_ADMIN='haram.an@myrealtrip.com';
 const REISSUE_APPLICABLE=new Set(['BR','8M','NX','NH','VJ']);
 const ADMIN_EMAILS=['haram.an@myrealtrip.com','sieon.choi@myrealtrip.com','hyerim.kim@myrealtrip.com']; // 관리자 추가 시 여기에 이메일 추가
+const GAS_URL=''; // Apps Script 배포 후 웹앱 URL 붙여넣기
+const GAS_SECRET='mrt-airline-comm-2026'; // gas-webapp.js의 GAS_SECRET과 동일
 
 let airlines=[],historyData=[],currentUser=null,isAdmin=false,currentFilter='over',currentSearch='',currentView='card';
 let tokenClient=null,accessToken=null,adminAccessToken=null;
@@ -353,10 +355,10 @@ function initGoogleAuth(){
     scope:'email profile',
     callback:handleToken
   });
-  // 관리자 저장용: 추가 스코프 (관리자만, 저장 시 요청)
+  // 파일 업로드용: Drive 스코프만 요청 (Sheets는 GAS 웹앱으로 처리)
   adminTokenClient=google.accounts.oauth2.initTokenClient({
     client_id:CLIENT_ID,
-    scope:'email profile https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file',
+    scope:'https://www.googleapis.com/auth/drive.file',
     callback:handleAdminToken
   });
 }
@@ -385,12 +387,10 @@ async function handleToken(resp){
   renderStats();renderCards();
   showToast(info.name+'님 환영합니다','success');
   if(isAdmin){
-    requestAdminAccess(async()=>{
-      await initDataSheets();
-      await initAuditSheet();
-      renderStats();renderCards();
-      if(location.hash==='#admin')showAdminPanel();
-    });
+    await initDataSheets();
+    await initAuditSheet();
+    renderStats();renderCards();
+    if(location.hash==='#admin')showAdminPanel();
   }
   if(location.hash==='#admin'&&isAdmin)showAdminPanel();
   loadSheetsData().then(()=>{renderStats();renderCards();});
@@ -431,16 +431,31 @@ function handleRoute(){
 }
 window.addEventListener('hashchange',handleRoute);
 
-// SHEETS API HELPERS
+// GAS WEB APP HELPERS (Sheets 직접 호출 대신 GAS 웹앱으로 중계)
+async function gasPost(payload){
+  if(!GAS_URL){console.warn('GAS_URL이 설정되지 않았습니다');return null;}
+  if(!currentUser)return null;
+  try{
+    const r=await fetch(GAS_URL,{method:'POST',body:JSON.stringify({...payload,secret:GAS_SECRET,email:currentUser.email}),redirect:'follow'});
+    if(!r.ok){console.error('GAS HTTP error:',r.status);return null;}
+    const json=await r.json();
+    if(json.error){console.error('GAS error:',json.error);return null;}
+    return json;
+  }catch(e){console.error('GAS fetch error:',e);return null;}
+}
 async function sheetsAppend(sheetName,values){
-  if(!adminAccessToken)return;
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(sheetName+'!A1')}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,{method:'POST',headers:{Authorization:'Bearer '+adminAccessToken,'Content-Type':'application/json'},body:JSON.stringify({values})}).catch(e=>console.error('sheetsAppend error:',e));
+  await gasPost({action:'appendRows',sheetName,values});
 }
-async function sheetsGetValues(range){
-  if(!adminAccessToken)return null;
-  const data=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`,{headers:{Authorization:'Bearer '+adminAccessToken}}).then(r=>r.json()).catch(()=>null);
-  return (data&&!data.error)?data:null;
+async function sheetsGetValues(sheetName){
+  return gasPost({action:'getValues',sheetName});
 }
+async function sheetsUpdate(sheetName,range,values){
+  await gasPost({action:'setValues',sheetName,range,values});
+}
+async function getCommSheetRows(){
+  return sheetsGetValues(COMM_SHEET);
+}
+// 공개 읽기용 (loadSheetsData에서 사용 — 토큰 불필요)
 async function sheetsGetValuesPublic(sheetName){
   const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=0&sheet=${encodeURIComponent(sheetName)}`;
   try{
@@ -453,25 +468,6 @@ async function sheetsGetValuesPublic(sheetName){
     const values=json.table.rows.map(row=>(row.c||[]).map(cell=>(cell&&cell.v!==null&&cell.v!==undefined)?String(cell.v):''));
     return {values};
   }catch(e){console.error('sheetsGetValuesPublic error:',e);return null;}
-}
-async function getCommSheetRows(){
-  if(adminAccessToken){
-    const resp=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(COMM_SHEET+'!A:A')}`,{headers:{Authorization:'Bearer '+adminAccessToken}}).catch(()=>null);
-    if(resp){
-      const data=await resp.json().catch(()=>null);
-      if(data&&!data.error&&data.values&&data.values.length>0)return data;
-      if(data&&data.error&&data.error.code===401)adminAccessToken=null; // 토큰 만료
-    }
-  }
-  return await sheetsGetValuesPublic(COMM_SHEET);
-}
-async function sheetsBatchUpdate(requests){
-  if(!adminAccessToken)return;
-  return fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`,{method:'POST',headers:{Authorization:'Bearer '+adminAccessToken,'Content-Type':'application/json'},body:JSON.stringify({requests})}).then(r=>r.json()).catch(e=>console.error('batchUpdate error:',e));
-}
-async function sheetsUpdate(range,values){
-  if(!adminAccessToken)return;
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,{method:'PUT',headers:{Authorization:'Bearer '+adminAccessToken,'Content-Type':'application/json'},body:JSON.stringify({values})}).catch(e=>console.error('sheetsUpdate error:',e));
 }
 
 async function loadSheetsData(){
@@ -503,20 +499,20 @@ async function loadSheetsData(){
   }catch(e){console.error('loadSheetsData error:',e);}
 }
 async function initDataSheets(){
-  if(!adminAccessToken)return;
+  if(!isAdmin||!GAS_URL)return;
   try{
-    const meta=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`,{headers:{Authorization:'Bearer '+adminAccessToken}}).then(r=>r.json());
-    const titles=(meta.sheets||[]).map(s=>s.properties.title);
+    const r=await gasPost({action:'getSheetNames'});
+    const titles=r?r.names:[];
     if(!titles.includes(COMM_SHEET)){
-      await sheetsBatchUpdate([{addSheet:{properties:{title:COMM_SHEET}}}]);
-      await sheetsUpdate(COMM_SHEET+'!A1',[
+      await gasPost({action:'createSheet',sheetName:COMM_SHEET});
+      await sheetsUpdate(COMM_SHEET,'A1',[
         ['code','bsp','over','soto','reissue','chd','inf','notes','images'],
         ...airlines.map(a=>[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,'[]'])
       ]);
     }
     if(!titles.includes(HIST_SHEET)){
-      await sheetsBatchUpdate([{addSheet:{properties:{title:HIST_SHEET}}}]);
-      await sheetsUpdate(HIST_SHEET+'!A1',[
+      await gasPost({action:'createSheet',sheetName:HIST_SHEET});
+      await sheetsUpdate(HIST_SHEET,'A1',[
         ['code','route','bsp','overEY','overBZ','ticketing','departure','notes','accountCode'],
         ...historyData.map(h=>[h.code,h.route,h.bsp,h.overEY,h.overBZ||'',h.ticketing,h.departure,h.notes,h.accountCode||''])
       ]);
@@ -525,24 +521,24 @@ async function initDataSheets(){
 }
 
 async function initAuditSheet(){
-  if(!adminAccessToken)return;
+  if(!isAdmin||!GAS_URL)return;
   try{
-    const meta=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`,{headers:{Authorization:'Bearer '+adminAccessToken}}).then(r=>r.json());
-    const exists=(meta.sheets||[]).some(s=>s.properties.title===AUDIT_SHEET_NAME);
+    const r=await gasPost({action:'getSheetNames'});
+    const exists=r&&(r.names||[]).includes(AUDIT_SHEET_NAME);
     if(!exists){
-      await sheetsBatchUpdate([{addSheet:{properties:{title:AUDIT_SHEET_NAME,gridProperties:{rowCount:2000,columnCount:8}}}}]);
+      await gasPost({action:'createSheet',sheetName:AUDIT_SHEET_NAME});
       await sheetsAppend(AUDIT_SHEET_NAME,[['날짜/시간','변경자','이메일','항공사','변경항목','이전값','변경값']]);
     }
   }catch(e){console.error('initAuditSheet error:',e);}
 }
 async function appendAuditLog(code,field,before,after){
-  if(!adminAccessToken||!currentUser)return;
+  if(!currentUser||!GAS_URL)return;
   const now=new Date().toLocaleString('ko-KR',{timeZone:'Asia/Seoul'});
   await sheetsAppend(AUDIT_SHEET_NAME,[[now,currentUser.name,currentUser.email,code,field,String(before),String(after)]]);
 }
 async function loadAuditLog(code){
-  if(!accessToken&&!adminAccessToken)return[];
-  const data=await sheetsGetValues(AUDIT_SHEET_NAME+'!A:G');
+  if(!currentUser||!isAdmin)return[];
+  const data=await sheetsGetValues(AUDIT_SHEET_NAME);
   if(!data||!data.values)return[];
   const rows=data.values.slice(1);
   return rows.filter(r=>r[3]===code).reverse();
@@ -1087,7 +1083,7 @@ function addHistRow(code){historyData.push({code,route:'',bsp:'',overEY:'',overB
 function removeHistRow(i){historyData.splice(i,1);const code=document.getElementById('adminAirlineSelect').value;loadAdminAirline(code);}
 
 async function saveAirline(code){
-  if(!adminAccessToken){requestAdminAccess(()=>saveAirline(code));return;}
+  if(!GAS_URL){showToast('저장 서버(GAS)가 설정되지 않았습니다. 관리자에게 문의하세요','error');return;}
   const a=airlines.find(x=>x.code===code);if(!a)return;
   const old={bsp:a.bsp,over:a.over,soto:a.soto,reissue:a.reissue,chd:a.chd,inf:a.inf,notes:a.notes};
   a.bsp=document.getElementById('ed-bsp').value;
@@ -1105,16 +1101,13 @@ async function saveAirline(code){
 
   // Sheets에 커미션 데이터 반영
   const commData=await getCommSheetRows();
-  if(!commData||!commData.values){
-    if(!adminAccessToken){showToast('권한이 만료되었습니다. 다시 시도합니다.','');requestAdminAccess(()=>saveAirline(code));return;}
-    showToast(`${code} 저장 실패: 시트 읽기 오류`,'error');return;
-  }
+  if(!commData||!commData.values){showToast(`${code} 저장 실패: 시트 읽기 오류`,'error');return;}
   const rowIdx=commData.values.findIndex(r=>r[0]===code);
   if(rowIdx<=0){showToast(`${code} 저장 실패: 항공사 행을 찾을 수 없음`,'error');return;}
-  await sheetsUpdate(COMM_SHEET+`!A${rowIdx+1}:I${rowIdx+1}`,[[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,JSON.stringify(a.images||[])]]);
+  await sheetsUpdate(COMM_SHEET,`A${rowIdx+1}:I${rowIdx+1}`,[[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,JSON.stringify(a.images||[])]]);
 
   // Sheets에 히스토리 전체 재기록
-  await sheetsUpdate(HIST_SHEET+'!A1',[
+  await sheetsUpdate(HIST_SHEET,'A1',[
     ['code','route','bsp','overEY','overBZ','ticketing','departure','notes','accountCode'],
     ...historyData.map(h=>[h.code,h.route,h.bsp,h.overEY,h.overBZ||'',h.ticketing,h.departure,h.notes,h.accountCode||''])
   ]);
@@ -1128,12 +1121,12 @@ function addImage(code){const a=airlines.find(x=>x.code===code);if(!a)return;con
 function removeImage(code,i){const a=airlines.find(x=>x.code===code);if(a&&a.images){a.images.splice(i,1);loadAdminAirline(code);}}
 function updateImgLabel(code,i,v){const a=airlines.find(x=>x.code===code);if(a&&a.images&&a.images[i])a.images[i].label=v;}
 async function saveImages(code){
-  if(!adminAccessToken)return;
+  if(!isAdmin||!GAS_URL)return;
   const a=airlines.find(x=>x.code===code);if(!a)return;
   const commData=await getCommSheetRows();
   if(commData&&commData.values){
     const rowIdx=commData.values.findIndex(r=>r[0]===code);
-    if(rowIdx>0)await sheetsUpdate(COMM_SHEET+`!I${rowIdx+1}`,[[JSON.stringify(a.images||[])]]);
+    if(rowIdx>0)await sheetsUpdate(COMM_SHEET,`I${rowIdx+1}`,[[JSON.stringify(a.images||[])]]);
   }
 }
 function onImgError(el){
