@@ -13,7 +13,7 @@
 //      index.html 상단 const GAS_URL = '...' 에 붙여넣기
 // ============================================================
 
-const SHEET_ID = '12qqW-NFFxbcvQa_whjoe2LRseCTVwWcLt07AvJzxcVs';
+const SHEET_ID = '1pmVuYSQnrb1lf5Oqb4PUn99tHQvzNO32N_4TeZKGXDc';
 const GAS_SECRET = 'mrt-airline-comm-2026'; // index.html의 GAS_SECRET과 반드시 일치
 const ALLOWED_DOMAINS = ['myrealtrip.com', 'aicx.kr'];
 const ADMIN_EMAILS = ['haram.an@myrealtrip.com', 'sieon.choi@myrealtrip.com', 'hyerim.kim@myrealtrip.com'];
