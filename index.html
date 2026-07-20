@@ -475,15 +475,19 @@ async function sheetsUpdate(sheetName,range,values){
   await sheetsApiWrite(writeUrl,{range:sheetName+'!'+range,majorDimension:'ROWS',values});
 }
 
-// 항공사 코드로 행 직접 업데이트 (공개 gviz로 행 번호 조회 → admin 토큰으로 쓰기)
+// 항공사 코드로 행 직접 업데이트 (admin 토큰으로 A열 읽어 행 번호 조회 → 쓰기)
 async function updateAirlineRowDirect(code,values){
-  const data=await sheetsGetValuesPublic(COMM_SHEET);
-  if(!data||!data.values)throw new Error('시트 읽기 실패');
-  const rowIdx=data.values.findIndex((r,i)=>i>0&&r[0]===code);
+  await ensureAdminToken();
+  const readUrl=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(COMM_SHEET+'!A:A')}`;
+  const r=await fetch(readUrl,{headers:{Authorization:'Bearer '+adminAccessToken}});
+  if(!r.ok)throw new Error('시트 읽기 실패 ('+r.status+')');
+  const data=await r.json();
+  const col=data.values||[];
+  const rowIdx=col.findIndex((row,i)=>i>0&&row[0]===code);
   if(rowIdx<0)throw new Error('항공사 코드를 시트에서 찾을 수 없습니다: '+code);
   const range=`${COMM_SHEET}!A${rowIdx+1}`;
-  const url=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=RAW`;
-  await sheetsApiWrite(url,{range,majorDimension:'ROWS',values});
+  const writeUrl=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=RAW`;
+  await sheetsApiWrite(writeUrl,{range,majorDimension:'ROWS',values});
 }
 // 공개 읽기용 (loadSheetsData에서 사용 — 토큰 불필요)
 async function sheetsGetValuesPublic(sheetName){
