@@ -360,10 +360,10 @@ function initGoogleAuth(){
     scope:'email profile',
     callback:handleToken
   });
-  // 파일 업로드용: Drive 스코프만 요청 (Sheets는 GAS 웹앱으로 처리)
+  // 관리자용: Drive 업로드 + Sheets 직접 쓰기 스코프
   adminTokenClient=google.accounts.oauth2.initTokenClient({
     client_id:CLIENT_ID,
-    scope:'https://www.googleapis.com/auth/drive.file',
+    scope:'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file',
     callback:handleAdminToken
   });
 }
@@ -436,29 +436,54 @@ function handleRoute(){
 }
 window.addEventListener('hashchange',handleRoute);
 
-// GAS WEB APP HELPERS (Sheets 직접 호출 대신 GAS 웹앱으로 중계)
-async function gasPost(payload){
-  if(!GAS_URL){console.warn('GAS_URL이 설정되지 않았습니다');return null;}
-  if(!currentUser)return null;
-  try{
-    const r=await fetch(GAS_URL,{method:'POST',body:JSON.stringify({...payload,secret:GAS_SECRET,email:currentUser.email}),redirect:'follow'});
-    if(!r.ok){console.error('GAS HTTP error:',r.status);return null;}
-    const json=await r.json();
-    if(json.error){console.error('GAS error:',json.error);return null;}
-    return json;
-  }catch(e){console.error('GAS fetch error:',e);return null;}
+// SHEETS API DIRECT HELPERS (GAS 대신 admin OAuth 토큰으로 직접 호출)
+
+// admin 토큰 확보: 없으면 silent refresh, 만료시 consent 없이 재요청
+function ensureAdminToken(){
+  return new Promise(resolve=>{
+    if(adminAccessToken){resolve();return;}
+    const origCb=adminTokenClient.callback;
+    adminTokenClient.callback=resp=>{
+      adminTokenClient.callback=origCb;
+      handleAdminToken(resp);
+      resolve();
+    };
+    adminTokenClient.requestAccessToken({prompt:''});
+  });
 }
+
+// Sheets API 쓰기 헬퍼 (401시 토큰 재요청 후 1회 재시도)
+async function sheetsApiWrite(url,body,method='PUT',retry=false){
+  await ensureAdminToken();
+  const r=await fetch(url,{method,headers:{Authorization:'Bearer '+adminAccessToken,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(r.status===401&&!retry){adminAccessToken=null;return sheetsApiWrite(url,body,method,true);}
+  if(!r.ok){const t=await r.text();throw new Error('Sheets API '+r.status+': '+t.slice(0,200));}
+  return r.json();
+}
+
+// 행 추가
 async function sheetsAppend(sheetName,values){
-  await gasPost({action:'appendRows',sheetName,values});
+  const url=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(sheetName+'!A1')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+  await sheetsApiWrite(url,{majorDimension:'ROWS',values},'POST');
 }
-async function sheetsGetValues(sheetName){
-  return gasPost({action:'getValues',sheetName});
-}
+
+// 범위 전체 덮어쓰기 (clear → write)
 async function sheetsUpdate(sheetName,range,values){
-  await gasPost({action:'setValues',sheetName,range,values});
+  const clearUrl=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(sheetName+'!A1:Z10000')}:clear`;
+  await sheetsApiWrite(clearUrl,{},'POST');
+  const writeUrl=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(sheetName+'!'+range)}?valueInputOption=RAW`;
+  await sheetsApiWrite(writeUrl,{range:sheetName+'!'+range,majorDimension:'ROWS',values});
 }
-async function getCommSheetRows(){
-  return sheetsGetValues(COMM_SHEET);
+
+// 항공사 코드로 행 직접 업데이트 (공개 gviz로 행 번호 조회 → admin 토큰으로 쓰기)
+async function updateAirlineRowDirect(code,values){
+  const data=await sheetsGetValuesPublic(COMM_SHEET);
+  if(!data||!data.values)throw new Error('시트 읽기 실패');
+  const rowIdx=data.values.findIndex((r,i)=>i>0&&r[0]===code);
+  if(rowIdx<0)throw new Error('항공사 코드를 시트에서 찾을 수 없습니다: '+code);
+  const range=`${COMM_SHEET}!A${rowIdx+1}`;
+  const url=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=RAW`;
+  await sheetsApiWrite(url,{range,majorDimension:'ROWS',values});
 }
 // 공개 읽기용 (loadSheetsData에서 사용 — 토큰 불필요)
 async function sheetsGetValuesPublic(sheetName){
@@ -513,53 +538,52 @@ async function loadSheetsData(){
   }catch(e){console.error('loadSheetsData error:',e);}
 }
 async function initDataSheets(){
-  if(!isAdmin||!GAS_URL)return;
+  if(!isAdmin)return;
   try{
-    const r=await gasPost({action:'getSheetNames'});
-    const titles=r?r.names:[];
-    if(!titles.includes(COMM_SHEET)){
-      await gasPost({action:'createSheet',sheetName:COMM_SHEET});
-      await sheetsUpdate(COMM_SHEET,'A1',[
-        ['code','bsp','over','soto','reissue','chd','inf','notes','images'],
-        ...airlines.map(a=>[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,'[]'])
-      ]);
+    await ensureAdminToken();
+    const meta=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties.title`,{headers:{Authorization:'Bearer '+adminAccessToken}}).then(r=>r.json());
+    const titles=(meta.sheets||[]).map(s=>s.properties.title);
+    async function ensureSheet(name,data){
+      if(!titles.includes(name)){
+        await sheetsApiWrite(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`,{requests:[{addSheet:{properties:{title:name}}}]},'POST');
+        await sheetsUpdate(name,'A1',data);
+      }
     }
-    if(!titles.includes(HIST_SHEET)){
-      await gasPost({action:'createSheet',sheetName:HIST_SHEET});
-      await sheetsUpdate(HIST_SHEET,'A1',[
-        ['code','route','bsp','overEY','overBZ','ticketing','departure','notes','accountCode'],
-        ...historyData.map(h=>[h.code,h.route,h.bsp,h.overEY,h.overBZ||'',h.ticketing,h.departure,h.notes,h.accountCode||''])
-      ]);
-    }
-    if(!titles.includes(NOTICE_SHEET)){
-      await gasPost({action:'createSheet',sheetName:NOTICE_SHEET});
-      await sheetsUpdate(NOTICE_SHEET,'A1',[['id','title','body','urgent','banner','date']]);
-    }
+    await ensureSheet(COMM_SHEET,[['code','bsp','over','soto','reissue','chd','inf','notes','images'],...airlines.map(a=>[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,'[]'])]);
+    await ensureSheet(HIST_SHEET,[['code','route','bsp','overEY','overBZ','ticketing','departure','notes','accountCode'],...historyData.map(h=>[h.code,h.route,h.bsp,h.overEY,h.overBZ||'',h.ticketing,h.departure,h.notes,h.accountCode||''])]);
+    await ensureSheet(NOTICE_SHEET,[['id','title','body','urgent','banner','date']]);
   }catch(e){console.error('initDataSheets error:',e);}
 }
 
 async function initAuditSheet(){
-  if(!isAdmin||!GAS_URL)return;
+  if(!isAdmin)return;
   try{
-    const r=await gasPost({action:'getSheetNames'});
-    const exists=r&&(r.names||[]).includes(AUDIT_SHEET_NAME);
-    if(!exists){
-      await gasPost({action:'createSheet',sheetName:AUDIT_SHEET_NAME});
+    await ensureAdminToken();
+    const meta=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties.title`,{headers:{Authorization:'Bearer '+adminAccessToken}}).then(r=>r.json());
+    const titles=(meta.sheets||[]).map(s=>s.properties.title);
+    if(!titles.includes(AUDIT_SHEET_NAME)){
+      await sheetsApiWrite(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`,{requests:[{addSheet:{properties:{title:AUDIT_SHEET_NAME}}}]},'POST');
       await sheetsAppend(AUDIT_SHEET_NAME,[['날짜/시간','변경자','이메일','항공사','변경항목','이전값','변경값']]);
     }
   }catch(e){console.error('initAuditSheet error:',e);}
 }
 async function appendAuditLog(code,field,before,after){
-  if(!currentUser||!GAS_URL)return;
+  if(!currentUser||!isAdmin)return;
   const now=new Date().toLocaleString('ko-KR',{timeZone:'Asia/Seoul'});
-  await sheetsAppend(AUDIT_SHEET_NAME,[[now,currentUser.name,currentUser.email,code,field,String(before),String(after)]]);
+  try{await sheetsAppend(AUDIT_SHEET_NAME,[[now,currentUser.name,currentUser.email,code,field,String(before),String(after)]]);}
+  catch(e){console.error('appendAuditLog error:',e);}
 }
 async function loadAuditLog(code){
   if(!currentUser||!isAdmin)return[];
-  const data=await sheetsGetValues(AUDIT_SHEET_NAME);
-  if(!data||!data.values)return[];
-  const rows=data.values.slice(1);
-  return rows.filter(r=>r[3]===code).reverse();
+  try{
+    await ensureAdminToken();
+    const url=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(AUDIT_SHEET_NAME+'!A:G')}`;
+    const r=await fetch(url,{headers:{Authorization:'Bearer '+adminAccessToken}});
+    if(!r.ok)return[];
+    const data=await r.json();
+    if(!data.values||data.values.length<=1)return[];
+    return data.values.slice(1).filter(r=>r[3]===code).reverse();
+  }catch(e){return[];}
 }
 
 // DRIVE FILE UPLOAD
@@ -676,11 +700,13 @@ function renderAdminNotices() {
 }
 
 async function saveNoticesToSheet(){
-  if(!isAdmin||!GAS_URL)return;
-  await sheetsUpdate(NOTICE_SHEET,'A1',[
-    ['id','title','body','urgent','banner','date'],
-    ...notices.map(n=>[n.id,n.title,n.body,String(n.urgent),String(n.banner),n.date])
-  ]);
+  if(!isAdmin)return;
+  try{
+    await sheetsUpdate(NOTICE_SHEET,'A1',[
+      ['id','title','body','urgent','banner','date'],
+      ...notices.map(n=>[n.id,n.title,n.body,String(n.urgent),String(n.banner),n.date])
+    ]);
+  }catch(e){console.error('saveNoticesToSheet error:',e);}
 }
 
 function addNotice() {
@@ -1111,7 +1137,7 @@ function addHistRow(code){historyData.push({code,route:'',bsp:'',overEY:'',overB
 function removeHistRow(i){historyData.splice(i,1);const code=document.getElementById('adminAirlineSelect').value;loadAdminAirline(code);}
 
 async function saveAirline(code){
-  if(!GAS_URL){showToast('저장 서버(GAS)가 설정되지 않았습니다. 관리자에게 문의하세요','error');return;}
+  if(!isAdmin){showToast('관리자만 저장할 수 있습니다','error');return;}
   const a=airlines.find(x=>x.code===code);if(!a)return;
   const old={bsp:a.bsp,over:a.over,soto:a.soto,reissue:a.reissue,chd:a.chd,inf:a.inf,notes:a.notes};
   a.bsp=document.getElementById('ed-bsp').value;
@@ -1127,9 +1153,9 @@ async function saveAirline(code){
   renderStats();renderCards();
   showToast(`${code} 저장 중...`,'');
 
-  // GAS에서 코드로 직접 행 찾아 업데이트 (읽기 단계 없음)
-  const saveR=await gasPost({action:'updateAirlineRow',sheetName:COMM_SHEET,code,values:[[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,JSON.stringify(a.images||[])]]});
-  if(!saveR){showToast(`${code} 저장 실패 — GAS 연결 오류 (배포 설정 확인)`, 'error');return;}
+  try{
+    await updateAirlineRowDirect(code,[[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,JSON.stringify(a.images||[])]]);
+  }catch(e){showToast(`${code} 저장 실패: ${e.message}`,'error');return;}
 
   // Sheets에 히스토리 전체 재기록
   await sheetsUpdate(HIST_SHEET,'A1',[
@@ -1146,9 +1172,10 @@ function addImage(code){const a=airlines.find(x=>x.code===code);if(!a)return;con
 function removeImage(code,i){const a=airlines.find(x=>x.code===code);if(a&&a.images){a.images.splice(i,1);loadAdminAirline(code);}}
 function updateImgLabel(code,i,v){const a=airlines.find(x=>x.code===code);if(a&&a.images&&a.images[i])a.images[i].label=v;}
 async function saveImages(code){
-  if(!isAdmin||!GAS_URL)return;
+  if(!isAdmin)return;
   const a=airlines.find(x=>x.code===code);if(!a)return;
-  await gasPost({action:'updateAirlineRow',sheetName:COMM_SHEET,code,values:[[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,JSON.stringify(a.images||[])]]});
+  try{await updateAirlineRowDirect(code,[[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,JSON.stringify(a.images||[])]]);}
+  catch(e){console.error('saveImages error:',e);}
 }
 function onImgError(el){
   const label=el.alt, href=el.dataset.viewurl||el.src;
