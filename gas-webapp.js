@@ -87,6 +87,23 @@ function doPost(e) {
       return resp({ success: true });
     }
 
+    // 항공사 코드로 행 찾아 직접 업데이트
+    if (action === 'updateAirlineRow') {
+      if (!isAdminUser) return resp({error:'Admin only'});
+      var uSheet = ss.getSheetByName(data.sheetName);
+      if (!uSheet) return resp({error:'Sheet not found'});
+      var uLastRow = uSheet.getLastRow();
+      if (uLastRow <= 1) return resp({error:'Sheet empty'});
+      var codeCol = uSheet.getRange(1, 1, uLastRow, 1).getValues();
+      var uRowIdx = -1;
+      for (var i = 1; i < codeCol.length; i++) {
+        if (String(codeCol[i][0]) === String(data.code)) { uRowIdx = i; break; }
+      }
+      if (uRowIdx < 0) return resp({error:'Code not found: ' + data.code});
+      uSheet.getRange(uRowIdx + 1, 1, 1, data.values[0].length).setValues(data.values);
+      return resp({ success: true, row: uRowIdx + 1 });
+    }
+
     return resp({ error: 'Unknown action: ' + action });
 
   } catch (err) {

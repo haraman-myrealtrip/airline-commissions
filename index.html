@@ -340,6 +340,7 @@ const ALLOWED_DOMAINS=['myrealtrip.com','aicx.kr'];
 const AUDIT_SHEET_NAME='변경이력';
 const COMM_SHEET='대시보드_커미션';
 const HIST_SHEET='대시보드_히스토리';
+const NOTICE_SHEET='공지사항';
 const SUPER_ADMIN='haram.an@myrealtrip.com';
 const REISSUE_APPLICABLE=new Set(['BR','8M','NX','NH','VJ']);
 const ADMIN_EMAILS=['haram.an@myrealtrip.com','sieon.choi@myrealtrip.com','hyerim.kim@myrealtrip.com']; // 관리자 추가 시 여기에 이메일 추가
@@ -500,6 +501,15 @@ async function loadSheetsData(){
         ticketing:r[5]||'',departure:r[6]||'',notes:r[7]||'',accountCode:r[8]||'',b2g:false
       }));
     }
+    const nv=await sheetsGetValuesPublic(NOTICE_SHEET);
+    if(nv&&nv.values&&nv.values.length>1){
+      notices=nv.values.slice(1).filter(r=>r[0]).map(r=>({
+        id:parseInt(r[0])||0,title:r[1]||'',body:r[2]||'',
+        urgent:r[3]==='true'||r[3]==='TRUE',banner:r[4]==='true'||r[4]==='TRUE',date:r[5]||''
+      }));
+      nextNoticeId=notices.length?Math.max(...notices.map(n=>n.id))+1:1;
+      renderNotices();
+    }
   }catch(e){console.error('loadSheetsData error:',e);}
 }
 async function initDataSheets(){
@@ -520,6 +530,10 @@ async function initDataSheets(){
         ['code','route','bsp','overEY','overBZ','ticketing','departure','notes','accountCode'],
         ...historyData.map(h=>[h.code,h.route,h.bsp,h.overEY,h.overBZ||'',h.ticketing,h.departure,h.notes,h.accountCode||''])
       ]);
+    }
+    if(!titles.includes(NOTICE_SHEET)){
+      await gasPost({action:'createSheet',sheetName:NOTICE_SHEET});
+      await sheetsUpdate(NOTICE_SHEET,'A1',[['id','title','body','urgent','banner','date']]);
     }
   }catch(e){console.error('initDataSheets error:',e);}
 }
@@ -661,6 +675,14 @@ function renderAdminNotices() {
     </div>`).join('');
 }
 
+async function saveNoticesToSheet(){
+  if(!isAdmin||!GAS_URL)return;
+  await sheetsUpdate(NOTICE_SHEET,'A1',[
+    ['id','title','body','urgent','banner','date'],
+    ...notices.map(n=>[n.id,n.title,n.body,String(n.urgent),String(n.banner),n.date])
+  ]);
+}
+
 function addNotice() {
   const title = document.getElementById('noticeTitle').value.trim();
   const body = document.getElementById('noticeBody').value.trim();
@@ -675,6 +697,7 @@ function addNotice() {
   renderNotices();
   renderAdminNotices();
   showToast('공지사항이 등록되었습니다', 'success');
+  saveNoticesToSheet();
 }
 
 function removeNotice(id) {
@@ -682,6 +705,7 @@ function removeNotice(id) {
   renderNotices();
   renderAdminNotices();
   showToast('공지사항이 삭제되었습니다');
+  saveNoticesToSheet();
 }
 
 // DATA
@@ -1103,12 +1127,9 @@ async function saveAirline(code){
   renderStats();renderCards();
   showToast(`${code} 저장 중...`,'');
 
-  // Sheets에 커미션 데이터 반영
-  const commData=await getCommSheetRows();
-  if(!commData||!commData.values){showToast(`${code} 저장 실패: 시트 읽기 오류`,'error');return;}
-  const rowIdx=commData.values.findIndex(r=>r[0]===code);
-  if(rowIdx<=0){showToast(`${code} 저장 실패: 항공사 행을 찾을 수 없음`,'error');return;}
-  await sheetsUpdate(COMM_SHEET,`A${rowIdx+1}:I${rowIdx+1}`,[[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,JSON.stringify(a.images||[])]]);
+  // GAS에서 코드로 직접 행 찾아 업데이트 (읽기 단계 없음)
+  const saveR=await gasPost({action:'updateAirlineRow',sheetName:COMM_SHEET,code,values:[[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,JSON.stringify(a.images||[])]]});
+  if(!saveR){showToast(`${code} 저장 실패 — GAS 연결 오류 (배포 설정 확인)`, 'error');return;}
 
   // Sheets에 히스토리 전체 재기록
   await sheetsUpdate(HIST_SHEET,'A1',[
@@ -1127,11 +1148,7 @@ function updateImgLabel(code,i,v){const a=airlines.find(x=>x.code===code);if(a&&
 async function saveImages(code){
   if(!isAdmin||!GAS_URL)return;
   const a=airlines.find(x=>x.code===code);if(!a)return;
-  const commData=await getCommSheetRows();
-  if(commData&&commData.values){
-    const rowIdx=commData.values.findIndex(r=>r[0]===code);
-    if(rowIdx>0)await sheetsUpdate(COMM_SHEET,`I${rowIdx+1}`,[[JSON.stringify(a.images||[])]]);
-  }
+  await gasPost({action:'updateAirlineRow',sheetName:COMM_SHEET,code,values:[[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,JSON.stringify(a.images||[])]]});
 }
 function onImgError(el){
   const label=el.alt, href=el.dataset.viewurl||el.src;
