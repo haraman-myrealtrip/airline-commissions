@@ -368,9 +368,8 @@ function initGoogleAuth(){
   });
 }
 function handleAdminToken(resp){
-  if(resp.error){showToast('권한 요청 실패','error');return;}
+  if(resp.error){showToast('권한 요청 실패: '+resp.error,'error');return;}
   adminAccessToken=resp.access_token;
-  showToast('저장 권한이 확인되었습니다','success');
   pendingAdminSave&&pendingAdminSave();
   pendingAdminSave=null;
 }
@@ -438,17 +437,18 @@ window.addEventListener('hashchange',handleRoute);
 
 // SHEETS API DIRECT HELPERS (GAS 대신 admin OAuth 토큰으로 직접 호출)
 
-// admin 토큰 확보: 없으면 silent refresh, 만료시 consent 없이 재요청
+// admin 토큰 확보: 없으면 팝업으로 동의 요청 (새 스코프 포함), 있으면 즉시 반환
 function ensureAdminToken(){
-  return new Promise(resolve=>{
+  return new Promise((resolve,reject)=>{
     if(adminAccessToken){resolve();return;}
     const origCb=adminTokenClient.callback;
     adminTokenClient.callback=resp=>{
       adminTokenClient.callback=origCb;
-      handleAdminToken(resp);
+      if(resp.error){reject(new Error('Google 권한 요청 실패: '+resp.error));return;}
+      adminAccessToken=resp.access_token;
       resolve();
     };
-    adminTokenClient.requestAccessToken({prompt:''});
+    adminTokenClient.requestAccessToken(); // 팝업 허용: 미동의 스코프면 동의 화면 표시
   });
 }
 
