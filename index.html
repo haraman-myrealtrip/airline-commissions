@@ -824,6 +824,8 @@ function getExpiryBadge(a){
 function daysUntil(iso){if(!iso)return null;const t=new Date(iso+'T00:00:00');if(isNaN(t.getTime()))return null;const n=new Date();n.setHours(0,0,0,0);return Math.round((t-n)/86400000);}
 function urgencyCls(iso){const d=daysUntil(iso);if(d===null)return'';if(d<0)return'dead';if(d<=45)return'crit';if(d<=120)return'warn';return'calm';}
 function ddayText(iso){const d=daysUntil(iso);if(d===null)return'';if(d<0)return'만료';if(d===0)return'D-day';return'D-'+d;}
+// 코드 옆 요약용: "8월 종료" (연도 다르면 "27년 6월 종료"), 과거는 "만료"
+function monthEndText(iso){const d=daysUntil(iso);if(d===null)return'';if(d<0)return'만료';const p=iso.split('-');const yr=+p[0],mo=+p[1];const cy=new Date().getFullYear();return (yr!==cy?String(yr).slice(2)+'년 ':'')+mo+'월 종료';}
 function fmtEnd(iso){if(!iso)return'';const p=iso.split('-');return'~'+(+p[1])+'/'+(+p[2]);}
 function fmtRange(s,e){const a=s?((+s.split('-')[1])+'/'+(+s.split('-')[2])):'';const b=e?((+e.split('-')[1])+'/'+(+e.split('-')[2])):'';if(a&&b)return a+' ~ '+b;if(b)return'~ '+b;if(a)return a+' ~';return'-';}
 function hasBspGroup(a){return gn(a.bsp)>0||gn(a.soto)>0||gn(a.chd)>0||gn(a.inf)>0;}
@@ -924,7 +926,7 @@ function renderCards(){
   grid.innerHTML=list.map(a=>{
     const bn=gn(a.bsp),on=gn(a.over),cls=on>0?'ov':(bn>0?'bsp-only':'nc');
     const soon=airlineSoonest(a);
-    const topChip=soon?`<span class="dchip ${urgencyCls(soon)}">${ddayText(soon)}</span>`:((!bn&&!on)?`<span class="badge nocom">노컴</span>`:'');
+    const topChip=soon?`<span class="dchip ${urgencyCls(soon)}">${monthEndText(soon)}</span>`:((!bn&&!on)?`<span class="badge nocom">노컴</span>`:'');
     const tracks=airlineTracks(a).map(t=>{
       const inner=t.end?`<span class="tperiod">발권 ${fmtEnd(t.end)}</span><span class="dchip ${urgencyCls(t.end)}">${ddayText(t.end)}</span>`:`<span class="tperiod none">발권기간 미설정</span>`;
       return`<div class="etrack"><span class="tlbl ${t.key}">${t.label}</span>${inner}</div>`;
