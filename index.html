@@ -75,7 +75,7 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
 .rate{text-align:center;padding:7px;background:#F7F8FA;border-radius:7px}
 .rate .rl{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.3px}
 .rate .rv{font-size:16px;font-weight:700;margin-top:1px}
-.rate .rv.hi{color:#00A86B}.rate .rv.ze{color:#D0D5DD}
+.rate .rv.hi{color:#00A86B}.rate .rv.bl{color:#0066FF}.rate .rv.ze{color:#D0D5DD}
 .card-tags{display:flex;gap:5px;flex-wrap:wrap;padding:0 16px 10px}
 .tag{font-size:10px;color:#555;background:#F7F8FA;padding:3px 8px;border-radius:4px}
 .tag b{font-weight:600}
@@ -108,6 +108,7 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
 .rate-box .rb-label{font-size:10px;color:#888;font-weight:500;text-transform:uppercase}
 .rate-box .rb-value{font-size:22px;font-weight:700;margin-top:4px}
 .rate-box .rb-value.hi{color:#00A86B}
+.rate-box .rb-value.bl{color:#0066FF}
 .rate-box .rb-value.ze{color:#D0D5DD}
 .note-box{background:#FFFBEB;border:1px solid #FEF3C7;border-radius:8px;padding:14px;font-size:13px;color:#92400E;line-height:1.6;margin-top:12px}
 .history-section,.archive-section{background:#fff;border:1px solid #E8EAED;border-radius:10px;padding:20px;margin-bottom:24px}
@@ -933,7 +934,7 @@ function renderCards(){
     }).join('');
     const acct=getAccountCode(a.code);
     const acctHtml=acct?renderAccountCodeCard(acct,a.code):'';
-    return`<div class="card ${cls}" onclick="navigate('detail','${encodeURIComponent(a.code)}')"><div class="card-top"><span class="card-code">${a.code}</span>${topChip}</div><div class="card-rates"><div class="rate"><div class="rl">BSP</div><div class="rv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</div></div><div class="rate"><div class="rl">오버컴</div><div class="rv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div><div class="rate"><div class="rl">SOTO</div><div class="rv ${gn(a.soto)>0?'hi':'ze'}">${fmtRate(a.soto)}</div></div></div>${tracks?`<div class="etracks">${tracks}</div>`:''}<div class="card-tags">${reissueTag(a.code)}<div class="tag">소아 <b>${fmtRate(a.chd)}</b></div><div class="tag">유아 <b>${fmtRate(a.inf)}</b></div></div>${acctHtml}<div class="card-arrow">상세 보기 →</div></div>`;
+    return`<div class="card ${cls}" onclick="navigate('detail','${encodeURIComponent(a.code)}')"><div class="card-top"><span class="card-code">${a.code}</span>${topChip}</div><div class="card-rates"><div class="rate"><div class="rl">BSP</div><div class="rv ${bn>0?'bl':'ze'}">${fmtRate(a.bsp)}</div></div><div class="rate"><div class="rl">오버컴</div><div class="rv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div><div class="rate"><div class="rl">SOTO</div><div class="rv ${gn(a.soto)>0?'bl':'ze'}">${fmtRate(a.soto)}</div></div></div><div class="card-tags">${reissueTag(a.code)}<div class="tag">소아 <b>${fmtRate(a.chd)}</b></div><div class="tag">유아 <b>${fmtRate(a.inf)}</b></div></div>${tracks?`<div class="etracks">${tracks}</div>`:''}${acctHtml}<div class="card-arrow">상세 보기 →</div></div>`;
   }).join('');
 }
 
@@ -994,9 +995,9 @@ function renderDetail(code){
   document.getElementById('detailContent').innerHTML=`
     <div class="detail-grid">
       <div class="info-card"><h3>커미션율 요약</h3><div class="rate-grid">
-        <div class="rate-box"><div class="rb-label">BSP컴</div><div class="rb-value ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</div></div>
+        <div class="rate-box"><div class="rb-label">BSP컴</div><div class="rb-value ${bn>0?'bl':'ze'}">${fmtRate(a.bsp)}</div></div>
         <div class="rate-box"><div class="rb-label">오버컴</div><div class="rb-value ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div>
-        <div class="rate-box"><div class="rb-label">SOTO</div><div class="rb-value ${gn(a.soto)>0?'hi':'ze'}">${fmtRate(a.soto)}</div></div>
+        <div class="rate-box"><div class="rb-label">SOTO</div><div class="rb-value ${gn(a.soto)>0?'bl':'ze'}">${fmtRate(a.soto)}</div></div>
         <div class="rate-box"><div class="rb-label">재발행</div><div class="rb-value" style="padding:0">${reissueTag(a.code)}</div></div>
         <div class="rate-box"><div class="rb-label">소아</div><div class="rb-value ${gn(a.chd)>0?'hi':'ze'}">${fmtRate(a.chd)}</div></div>
         <div class="rate-box"><div class="rb-label">유아</div><div class="rb-value ${gn(a.inf)>0?'hi':'ze'}">${fmtRate(a.inf)}</div></div>
