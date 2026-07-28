@@ -348,6 +348,8 @@ const firebaseConfig={
 firebase.initializeApp(firebaseConfig);
 const db=firebase.firestore();
 const auth=firebase.auth();
+// 항공사 코드에 '/'가 있으면(예: AF/KL) Firestore 문서ID로 못 쓰므로 치환. 실제 코드는 문서의 code 필드에 보존.
+function aid(code){return String(code).replace(/\//g,'_');}
 
 const ALLOWED_DOMAINS=['myrealtrip.com','aicx.kr'];
 const SUPER_ADMIN='haram.an@myrealtrip.com';
@@ -418,8 +420,8 @@ let _unsubs=[];
 function subscribeData(){
   if(_unsubs.length)return;
   _unsubs.push(db.collection('airlines').onSnapshot(snap=>{
-    airlines=snap.docs.map(d=>({code:d.id,...d.data()}));
-    airlines.sort((a,b)=>a.code.localeCompare(b.code));
+    airlines=snap.docs.map(d=>({code:d.data().code||d.id,...d.data()}));
+    airlines.sort((a,b)=>String(a.code).localeCompare(String(b.code)));
     renderStats();renderCards();
     if(document.getElementById('adminPanel').classList.contains('visible')){refreshAdminAirlineSelect();renderSeedBox();}
     const h=location.hash||'';
@@ -466,24 +468,36 @@ async function loadAuditLog(code){
 }
 // 최초 1회 데이터 적재 — 관리자 로그인 후 브라우저 콘솔에서 seedFromEmbedded() 실행. 컬렉션이 비어있을 때만 동작(멱등).
 async function seedFromEmbedded(){
+  console.log('[seed] 시작 isAdmin=',isAdmin,'user=',currentUser);
   if(!isAdmin){showToast('관리자만 seed 가능','error');return;}
-  const existing=await db.collection('airlines').limit(1).get();
-  if(!existing.empty){showToast('이미 데이터가 있어 seed를 건너뜁니다','');return;}
-  loadEmbeddedData();
-  const batch=db.batch();
-  airlines.forEach(a=>{
-    batch.set(db.collection('airlines').doc(a.code),{
-      bsp:a.bsp,over:a.over,soto:a.soto,reissue:a.reissue,chd:a.chd,inf:a.inf,notes:a.notes
+  try{
+    showToast('초기 데이터 가져오는 중...','');
+    const existing=await db.collection('airlines').limit(1).get();
+    if(!existing.empty){showToast('이미 데이터가 있어 seed를 건너뜁니다','');return;}
+    loadEmbeddedData();
+    console.log('[seed] 항공사',airlines.length,'히스토리',historyData.length);
+    const batch=db.batch();
+    airlines.forEach(a=>{
+      batch.set(db.collection('airlines').doc(aid(a.code)),{
+        code:a.code,bsp:a.bsp,over:a.over,soto:a.soto,reissue:a.reissue,chd:a.chd,inf:a.inf,notes:a.notes
+      });
     });
-  });
-  await batch.commit();
-  for(const h of historyData){
-    await db.collection('history').add({
-      code:h.code,route:h.route,bsp:h.bsp,overEY:h.overEY,overBZ:h.overBZ||'',
-      ticketing:h.ticketing,departure:h.departure,notes:h.notes,accountCode:h.accountCode||'',b2g:!!h.b2g
+    await batch.commit();
+    console.log('[seed] 항공사 커밋 완료, 히스토리 적재 시작');
+    const hbatch=db.batch();
+    historyData.forEach(h=>{
+      hbatch.set(db.collection('history').doc(),{
+        code:h.code,route:h.route,bsp:h.bsp,overEY:h.overEY,overBZ:h.overBZ||'',
+        ticketing:h.ticketing,departure:h.departure,notes:h.notes,accountCode:h.accountCode||'',b2g:!!h.b2g
+      });
     });
+    await hbatch.commit();
+    console.log('[seed] 완료');
+    showToast('초기 데이터 seed 완료 ('+airlines.length+'개 항공사)','success');
+  }catch(e){
+    console.error('[seed] 실패:',e);
+    showToast('seed 실패: '+(e&&e.message||e),'error');
   }
-  showToast('초기 데이터 seed 완료 ('+airlines.length+'개 항공사)','success');
 }
 
 
@@ -967,7 +981,7 @@ async function saveAirline(code){
   rows.forEach(row=>{codeHist.push({code,route:row.querySelector('[data-field="route"]').value,bsp:row.querySelector('[data-field="bsp"]').value,overEY:row.querySelector('[data-field="overEY"]').value,overBZ:'',ticketing:row.querySelector('[data-field="ticketing"]').value,departure:row.querySelector('[data-field="departure"]').value,notes:row.querySelector('[data-field="notes"]').value,accountCode:row.querySelector('[data-field="accountCode"]').value||'',b2g:false});});
   showToast(`${code} 저장 중...`,'');
   try{
-    await db.collection('airlines').doc(code).set(next,{merge:true});
+    await db.collection('airlines').doc(aid(code)).set({...next,code},{merge:true});
     // 해당 항공사 history 전체 교체 (기존 삭제 후 재기록)
     const oldHist=await db.collection('history').where('code','==',code).get();
     const batch=db.batch();
@@ -986,7 +1000,7 @@ async function addAirlineDoc(){
   if(!code){showToast('항공사 코드를 입력하세요','error');return;}
   if(airlines.some(a=>a.code===code)){showToast('이미 존재하는 코드입니다: '+code,'error');return;}
   try{
-    await db.collection('airlines').doc(code).set({bsp:'0',over:'0',soto:'0',reissue:'0',chd:'0',inf:'0',notes:''});
+    await db.collection('airlines').doc(aid(code)).set({code,bsp:'0',over:'0',soto:'0',reissue:'0',chd:'0',inf:'0',notes:''});
     await appendAuditLog(code,'항공사추가','-',code);
     document.getElementById('newAirlineCode').value='';
     showToast(code+' 추가됨 — 아래에서 선택해 값을 입력하세요','success');
