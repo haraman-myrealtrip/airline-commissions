@@ -409,6 +409,7 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
       <select id="adminAirlineSelect" onchange="loadAdminAirline(this.value)"><option value="">항공사 선택...</option></select>
       <input type="text" id="newAirlineCode" placeholder="새 항공사 코드 (예: TW)" style="padding:9px 12px;border:1.5px solid #D0D5DD;border-radius:7px;font-size:13px;width:180px;text-transform:uppercase">
       <button class="btn-secondary" onclick="addAirlineDoc()">+ 새 항공사 추가</button>
+      <button class="btn-secondary" onclick="backfillDatesFromNotes()" title="기존 비고의 만료일을 발권 만료일 필드로 일괄 채움">비고→발권만료일 채우기</button>
     </div>
     <div id="adminEditArea"></div>
   </div>
@@ -1120,6 +1121,26 @@ async function saveAirline(code){
   }catch(e){showToast(`${code} 저장 실패: ${e.message}`,'error');}
 }
 
+// 일회성: 기존 비고(notes)의 만료일(~26.8.31 등)을 파싱해 발권 종료일 필드로 채움 (빈 값만).
+async function backfillDatesFromNotes(){
+  if(!isAdmin){showToast('관리자만 가능합니다','error');return;}
+  try{
+    showToast('비고에서 발권 만료일 추출 중...','');
+    let n=0;const batch=db.batch();
+    airlines.forEach(a=>{
+      const end=parseEndDate(a.notes);
+      if(!end||isNaN(end.getTime()))return;
+      const iso=end.getFullYear()+'-'+String(end.getMonth()+1).padStart(2,'0')+'-'+String(end.getDate()).padStart(2,'0');
+      const patch={};
+      if(gn(a.over)>0&&!a.overTktEnd)patch.overTktEnd=iso;
+      else if(hasBspGroup(a)&&!a.bspTktEnd)patch.bspTktEnd=iso;
+      if(Object.keys(patch).length){batch.set(db.collection('airlines').doc(aid(a.code)),patch,{merge:true});n++;}
+    });
+    if(!n){showToast('채울 대상이 없습니다 (비고에 날짜 없음 또는 이미 설정됨)','');return;}
+    await batch.commit();
+    showToast(n+'개 항공사 발권 만료일 자동 반영 완료','success');
+  }catch(e){showToast('자동 채우기 실패: '+e.message,'error');}
+}
 async function addAirlineDoc(){
   if(!isAdmin){showToast('관리자만 추가할 수 있습니다','error');return;}
   const code=(document.getElementById('newAirlineCode').value||'').trim().toUpperCase();
