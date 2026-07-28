@@ -249,6 +249,9 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
 .rate-line .ri{display:flex;flex-direction:column;gap:4px}
 .rate-line .ri i{font-style:normal;font-size:10px;font-weight:700;color:#8A93A3}
 .rate-line .ri input{width:76px;text-align:center;font-weight:700}
+.ongchk{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#6B7688;font-weight:600;cursor:pointer;white-space:nowrap}
+.ongchk input{width:auto;margin:0}
+.drange input[type=date]:disabled{background:#F1F3F7;color:#AAB2BF}
 /* ===== 상세 적용기간 ===== */
 .period-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px}
 .period-card{background:#fff;border:1px solid #E8EAED;border-radius:10px;padding:16px}
@@ -835,16 +838,24 @@ function getExpiryBadge(a){
   return'';
 }
 // ===== 구조화 발권 종료일 기반 D-day · 정렬 =====
-function daysUntil(iso){if(!iso)return null;const t=new Date(iso+'T00:00:00');if(isNaN(t.getTime()))return null;const n=new Date();n.setHours(0,0,0,0);return Math.round((t-n)/86400000);}
-function urgencyCls(iso){const d=daysUntil(iso);if(d===null)return'';if(d<0)return'dead';if(d<=45)return'crit';if(d<=120)return'warn';return'calm';}
-function ddayText(iso){const d=daysUntil(iso);if(d===null)return'';if(d<0)return'만료';if(d===0)return'D-day';return'D-'+d;}
-// 코드 옆 요약용: "8월 종료" (연도 다르면 "27년 6월 종료"), 과거는 "만료"
-function monthEndText(iso){const d=daysUntil(iso);if(d===null)return'';if(d<0)return'만료';const p=iso.split('-');const yr=+p[0],mo=+p[1];const cy=new Date().getFullYear();return (yr!==cy?String(yr).slice(2)+'년 ':'')+mo+'월 종료';}
-function fmtEnd(iso){if(!iso)return'';const p=iso.split('-');return'~'+(+p[1])+'/'+(+p[2]);}
-function fmtRange(s,e){const a=s?((+s.split('-')[1])+'/'+(+s.split('-')[2])):'';const b=e?((+e.split('-')[1])+'/'+(+e.split('-')[2])):'';if(a&&b)return a+' ~ '+b;if(b)return'~ '+b;if(a)return a+' ~';return'-';}
+// 종료일 특수값 'ongoing' = 별도 공지 전까지 상시 발권
+function daysUntil(iso){if(!iso||iso==='ongoing')return null;const t=new Date(iso+'T00:00:00');if(isNaN(t.getTime()))return null;const n=new Date();n.setHours(0,0,0,0);return Math.round((t-n)/86400000);}
+function urgencyCls(iso){if(iso==='ongoing')return'calm';const d=daysUntil(iso);if(d===null)return'';if(d<0)return'dead';if(d<=45)return'crit';if(d<=120)return'warn';return'calm';}
+function ddayText(iso){if(iso==='ongoing')return'상시';const d=daysUntil(iso);if(d===null)return'';if(d<0)return'만료';if(d===0)return'D-day';return'D-'+d;}
+// 코드 옆 요약용: "8월 종료" (연도 다르면 "27년 6월 종료"), 과거는 "만료", 상시는 "상시"
+function monthEndText(iso){if(iso==='ongoing')return'상시';const d=daysUntil(iso);if(d===null)return'';if(d<0)return'만료';const p=iso.split('-');const yr=+p[0],mo=+p[1];const cy=new Date().getFullYear();return (yr!==cy?String(yr).slice(2)+'년 ':'')+mo+'월 종료';}
+function mmdd(iso){const p=iso.split('-');return (+p[1])+'/'+(+p[2]);}
+function fmtEnd(iso){if(!iso)return'';if(iso==='ongoing')return'별도 공지 전까지';return'~'+mmdd(iso);}
+function fmtRange(s,e){const a=(s&&s!=='ongoing')?mmdd(s):'';const b=(e==='ongoing')?'별도 공지 전까지':(e?mmdd(e):'');if(a&&b)return a+' ~ '+b;if(b)return(e==='ongoing'?b:'~ '+b);if(a)return a+' ~';return'-';}
 function hasBspGroup(a){return gn(a.bsp)>0||gn(a.soto)>0||gn(a.chd)>0||gn(a.inf)>0;}
 function airlineTracks(a){const t=[];if(gn(a.over)>0)t.push({key:'over',label:'오버컴',end:a.overTktEnd||''});if(hasBspGroup(a))t.push({key:'bsp',label:'BSP그룹',end:a.bspTktEnd||''});return t;}
-function airlineSoonest(a){const ends=airlineTracks(a).map(t=>t.end).filter(Boolean);if(!ends.length)return null;return ends.slice().sort()[0];}
+function airlineSoonest(a){const ends=airlineTracks(a).map(t=>t.end).filter(Boolean);if(!ends.length)return null;const dates=ends.filter(e=>e!=='ongoing');if(dates.length)return dates.slice().sort()[0];return 'ongoing';}
+// 관리 편집: 발권/출발 기간 범위 입력(종료에 '별도 공지까지' 체크 지원)
+function dateRange(startId,endId,startVal,endVal){
+  const ong=endVal==='ongoing';
+  return `<div class="drange"><input type="date" id="${startId}" value="${startVal&&startVal!=='ongoing'?startVal:''}"><span class="tilde">~</span><input type="date" id="${endId}" value="${ong?'':(endVal||'')}" ${ong?'disabled':''}><label class="ongchk"><input type="checkbox" id="${endId}-ong" ${ong?'checked':''} onchange="toggleOngoing('${endId}',this)"> 별도 공지까지</label></div>`;
+}
+function toggleOngoing(endId,cb){const el=document.getElementById(endId);if(!el)return;el.disabled=cb.checked;if(cb.checked)el.value='';}
 
 function toggleAcctCard(id, btn) {
   const el = document.getElementById(id);
@@ -1077,9 +1088,9 @@ function loadAdminAirline(code){
         <div class="ef-rows">
           <div class="ef"><label>오버컴 %</label><input class="rate-w" id="ed-over" value="${a.over}" style="width:90px;text-align:center;font-weight:700"></div>
           <div class="ef"><label>발권기간 <span class="hl">· 종료일이 앞단 D-day 기준</span></label>
-            <div class="drange"><input type="date" id="ed-over-tstart" value="${a.overTktStart||''}"><span class="tilde">~</span><input type="date" id="ed-over-tend" value="${a.overTktEnd||''}"></div></div>
+            ${dateRange('ed-over-tstart','ed-over-tend',a.overTktStart,a.overTktEnd)}</div>
           <div class="ef"><label>출발기간 <span class="mut">· 상세에서만 표시</span></label>
-            <div class="drange"><input type="date" id="ed-over-dstart" value="${a.overDepStart||''}"><span class="tilde">~</span><input type="date" id="ed-over-dend" value="${a.overDepEnd||''}"></div></div>
+            ${dateRange('ed-over-dstart','ed-over-dend',a.overDepStart,a.overDepEnd)}</div>
         </div>
       </div>
       <div class="edit-block bsp">
@@ -1094,9 +1105,9 @@ function loadAdminAirline(code){
               <span class="ri"><i>유아(INF)</i><input id="ed-inf" value="${a.inf}"></span>
             </div></div>
           <div class="ef"><label>발권기간 <span class="hl">· 종료일이 앞단 D-day 기준</span></label>
-            <div class="drange"><input type="date" id="ed-bsp-tstart" value="${a.bspTktStart||''}"><span class="tilde">~</span><input type="date" id="ed-bsp-tend" value="${a.bspTktEnd||''}"></div></div>
+            ${dateRange('ed-bsp-tstart','ed-bsp-tend',a.bspTktStart,a.bspTktEnd)}</div>
           <div class="ef"><label>출발기간 <span class="mut">· 상세에서만 표시</span></label>
-            <div class="drange"><input type="date" id="ed-bsp-dstart" value="${a.bspDepStart||''}"><span class="tilde">~</span><input type="date" id="ed-bsp-dend" value="${a.bspDepEnd||''}"></div></div>
+            ${dateRange('ed-bsp-dstart','ed-bsp-dend',a.bspDepStart,a.bspDepEnd)}</div>
         </div>
       </div>
       <div class="form-group form-full"><label>비고 / 주의사항</label><textarea id="ed-notes" rows="3">${a.notes||''}</textarea></div>
@@ -1114,14 +1125,15 @@ async function saveAirline(code){
   if(!isAdmin){showToast('관리자만 저장할 수 있습니다','error');return;}
   const a=airlines.find(x=>x.code===code);if(!a)return;
   const gv=id=>{const e=document.getElementById(id);return e?e.value:'';};
+  const ev=id=>{const cb=document.getElementById(id+'-ong');return (cb&&cb.checked)?'ongoing':gv(id);};
   const dateFields=['overTktStart','overTktEnd','overDepStart','overDepEnd','bspTktStart','bspTktEnd','bspDepStart','bspDepEnd'];
   const old={bsp:a.bsp,over:a.over,soto:a.soto,reissue:a.reissue,chd:a.chd,inf:a.inf,notes:a.notes};
   dateFields.forEach(f=>old[f]=a[f]||'');
   const next={
     bsp:gv('ed-bsp'),over:gv('ed-over'),soto:gv('ed-soto'),reissue:gv('ed-reissue'),
     chd:gv('ed-chd'),inf:gv('ed-inf'),notes:gv('ed-notes'),
-    overTktStart:gv('ed-over-tstart'),overTktEnd:gv('ed-over-tend'),overDepStart:gv('ed-over-dstart'),overDepEnd:gv('ed-over-dend'),
-    bspTktStart:gv('ed-bsp-tstart'),bspTktEnd:gv('ed-bsp-tend'),bspDepStart:gv('ed-bsp-dstart'),bspDepEnd:gv('ed-bsp-dend')
+    overTktStart:gv('ed-over-tstart'),overTktEnd:ev('ed-over-tend'),overDepStart:gv('ed-over-dstart'),overDepEnd:ev('ed-over-dend'),
+    bspTktStart:gv('ed-bsp-tstart'),bspTktEnd:ev('ed-bsp-tend'),bspDepStart:gv('ed-bsp-dstart'),bspDepEnd:ev('ed-bsp-dend')
   };
   const rows=document.querySelectorAll('#historyEditList .history-edit-row'),codeHist=[];
   rows.forEach(row=>{codeHist.push({code,route:row.querySelector('[data-field="route"]').value,bsp:row.querySelector('[data-field="bsp"]').value,overEY:row.querySelector('[data-field="overEY"]').value,overBZ:'',ticketing:row.querySelector('[data-field="ticketing"]').value,departure:row.querySelector('[data-field="departure"]').value,notes:row.querySelector('[data-field="notes"]').value,accountCode:row.querySelector('[data-field="accountCode"]').value||'',b2g:false});});
