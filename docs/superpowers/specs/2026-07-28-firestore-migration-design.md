@@ -56,7 +56,8 @@
   - 기존 정수 `id`는 문서 ID(autoId)로 대체.
 
 ### 4.1 추가 결정 (2026-07-28)
-- **이미지 첨부**: 구글 드라이브 유지. 단, 드라이브 업로드에 필요한 액세스 토큰은 **Firebase Auth `GoogleAuthProvider`에 `drive.file` 스코프를 추가**해 로그인 시 획득한다(`result.credential.accessToken`). 토큰 만료 시 업로드 시점에 재-consent 팝업(관리자·비상시적 동작이라 허용). 커미션 데이터 자체는 Firestore라 토큰과 무관.
+- **이미지 첨부**: ~~구글 드라이브 유지~~ → **기능 완전 제거** (2026-07-28 사용자 확정). 현재 권위 데이터(하드코딩 배열)의 모든 항공사 `images`가 빈 배열이라 잃는 데이터 없음. 이미지가 유일하게 Google API 토큰(drive.file)을 요구하던 부분이므로, 제거하면 인증이 순수 Firebase Auth가 되어 토큰만료·재consent 이슈가 원천 소멸. detail 페이지의 아카이빙 이미지 섹션 + 관리 UI + 업로드/삭제 로직 + 이미지 모달 모두 삭제. 향후 필요 시 Firebase Storage로 별도 검토.
+  - 삭제 대상 함수/필드: `handleFileUpload`, `uploadFileToDrive`, `removeFile`, `addImage`, `removeImage`, `updateImgLabel`, `saveImages`, `onImgError`, `openImgModal`/`closeModal`(이미지 모달), `airlines.images` 필드.
 - **새 항공사 추가**: 관리 패널에 "새 항공사 추가" 기능 신설(코드+초기값 입력 → `airlines/{code}` 생성). 기존엔 HTML 하드코딩으로만 가능했음. 삭제 기능은 현행에 없으므로 범위 밖.
 - **최고관리자(super admin)**: `haram.an@myrealtrip.com`. 공지 관리·관리자 목록 UI는 최고관리자만 노출(현행 유지).
 
