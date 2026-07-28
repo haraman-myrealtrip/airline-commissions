@@ -153,9 +153,18 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
 .btn-primary{background:#0066FF;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
 .btn-primary:hover{background:#0052CC}
 .btn-secondary{background:#fff;color:#555;border:1.5px solid #D0D5DD;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer}
-.history-edit-row{display:grid;grid-template-columns:1.5fr 0.5fr 0.5fr 1fr 1fr 0.8fr 2fr 40px;gap:8px;align-items:start;margin-bottom:8px;padding:8px;background:#F8FAFC;border-radius:6px}
-.history-edit-row input,.history-edit-row textarea{padding:7px 10px;border:1px solid #D0D5DD;border-radius:5px;font-size:12px;font-family:inherit}
-.history-edit-row textarea{min-height:50px;resize:vertical}
+.hist-card{background:#F8FAFC;border:1px solid #E8EAED;border-radius:9px;padding:14px;margin-bottom:10px}
+.hist-card .hc-top{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.hist-card .hc-route{flex:1;padding:9px 12px;border:1.5px solid #D0D5DD;border-radius:7px;font-size:14px;font-weight:700;font-family:inherit;color:#1B2A4A;outline:none}
+.hist-card .hc-route:focus{border-color:#0066FF;box-shadow:0 0 0 3px rgba(0,102,255,.08)}
+.hist-card .btn-remove{background:#fff;border:1px solid #F0C0C0;color:#E53E3E;border-radius:7px;width:34px;height:34px;cursor:pointer;font-size:18px;flex:none;padding:0}
+.hist-card .btn-remove:hover{background:#FFF5F5}
+.hist-card .hc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px}
+.hist-card label{display:flex;flex-direction:column;gap:4px;font-size:10.5px;font-weight:700;color:#8A93A3;letter-spacing:.2px}
+.hist-card label input,.hist-card label textarea{padding:8px 10px;border:1.5px solid #D0D5DD;border-radius:6px;font-size:12.5px;font-family:inherit;color:#1B2A4A;font-weight:500;outline:none}
+.hist-card label input:focus,.hist-card label textarea:focus{border-color:#0066FF;box-shadow:0 0 0 3px rgba(0,102,255,.08)}
+.hist-card .hc-notes{margin-top:10px}
+.hist-card .hc-notes textarea{min-height:52px;resize:vertical}
 .btn-remove{background:none;border:none;color:#E53E3E;cursor:pointer;font-size:18px;padding:4px}
 .btn-add{background:#F7F8FA;border:1.5px dashed #D0D5DD;border-radius:8px;padding:10px;text-align:center;font-size:12px;color:#888;cursor:pointer;margin-top:8px}
 .btn-add:hover{background:#E8F2FF;border-color:#0066FF;color:#0066FF}
@@ -1116,7 +1125,17 @@ function loadAdminAirline(code){
     <div class="edit-section"><h3>커미션 히스토리 관리 <span style="font-size:11px;font-weight:400;color:#AAA">— 노선별 상세</span></h3><div id="historyEditList">${hist.map((h,i)=>renderHistRow(h,i)).join('')}</div><div class="btn-add" onclick="addHistRow('${code}')">+ 히스토리 추가</div></div>`;
 }
 
-function renderHistRow(h,i){return`<div class="history-edit-row" data-idx="${i}"><input value="${h.route||''}" placeholder="노선" data-field="route"><input value="${h.bsp||''}" placeholder="BSP" data-field="bsp"><input value="${h.overEY||''}" placeholder="오버컴" data-field="overEY"><input value="${h.ticketing||''}" placeholder="발권기간" data-field="ticketing"><input value="${h.departure||''}" placeholder="출발기간" data-field="departure"><input value="${h.accountCode||''}" placeholder="Account Code" data-field="accountCode" style="font-family:monospace"><textarea placeholder="비고" data-field="notes">${h.notes||''}</textarea><button class="btn-remove" onclick="removeHistRow(${i})">×</button></div>`;}
+function renderHistRow(h,i){return`<div class="hist-card" data-idx="${i}">
+  <div class="hc-top"><input class="hc-route" value="${h.route||''}" placeholder="노선 (예: ICN-LHR)" data-field="route"><button class="btn-remove" onclick="removeHistRow(${i})" title="이 행 삭제">×</button></div>
+  <div class="hc-grid">
+    <label>BSP<input value="${h.bsp||''}" placeholder="0%" data-field="bsp"></label>
+    <label>오버컴<input value="${h.overEY||''}" placeholder="0%" data-field="overEY"></label>
+    <label>발권기간<input value="${h.ticketing||''}" placeholder="~26.8.31" data-field="ticketing"></label>
+    <label>출발기간<input value="${h.departure||''}" placeholder="~26.12.31" data-field="departure"></label>
+    <label>Account Code<input value="${h.accountCode||''}" placeholder="투어코드" data-field="accountCode" style="font-family:monospace"></label>
+  </div>
+  <label class="hc-notes">비고<textarea placeholder="조건·메모" data-field="notes">${h.notes||''}</textarea></label>
+</div>`;}
 
 function addHistRow(code){historyData.push({code,route:'',bsp:'',overEY:'',overBZ:'',ticketing:'',departure:'',notes:'',accountCode:'',b2g:false});document.getElementById('historyEditList').insertAdjacentHTML('beforeend',renderHistRow(historyData[historyData.length-1],historyData.length-1));}
 function removeHistRow(i){historyData.splice(i,1);const code=document.getElementById('adminAirlineSelect').value;loadAdminAirline(code);}
