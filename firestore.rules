@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 로그인 + 사내 허용 도메인(@myrealtrip.com / @aicx.kr)이면 읽기 허용
+    function isAllowedDomain() {
+      return request.auth != null
+        && request.auth.token.email.matches('.*@(myrealtrip[.]com|aicx[.]kr)$');
+    }
+
+    // 관리자만 쓰기 허용.
+    // ⚠️ 관리자 추가/삭제 시 index.html 의 ADMIN_EMAILS 와 아래 목록을 반드시 동일하게 유지.
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email in [
+        'haram.an@myrealtrip.com',
+        'sieon.choi@myrealtrip.com',
+        'hyerim.kim@myrealtrip.com'
+      ];
+    }
+
+    match /{document=**} {
+      allow read: if isAllowedDomain();
+      allow write: if isAdmin();
+    }
+  }
+}
