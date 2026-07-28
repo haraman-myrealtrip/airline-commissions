@@ -214,6 +214,41 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
 .google-signin-btn:hover{background:#F8F9FA;border-color:#AAA;box-shadow:0 1px 4px rgba(0,0,0,0.1)}
 @keyframes spin{to{transform:rotate(360deg)}}
 
+/* ===== 만료 트랙 · D-day 칩 (카드 하이브리드) ===== */
+.etracks{display:flex;flex-direction:column;gap:5px;padding:2px 16px 11px}
+.etrack{display:flex;align-items:center;gap:8px;font-size:11.5px}
+.tlbl{font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;white-space:nowrap}
+.tlbl.over{background:#E6F9F0;color:#006644}
+.tlbl.bsp{background:#E8F2FF;color:#0052CC}
+.tperiod{font-weight:700;color:#1B2A4A}
+.tperiod.none{font-weight:500;color:#AAB2BF}
+.dchip{font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.etrack .dchip{margin-left:auto}
+.dchip.crit{background:#FCEBEB;color:#D42E2E}
+.dchip.warn{background:#FBF1E1;color:#B96A00}
+.dchip.calm{background:#EEF1F6;color:#6B7688}
+.dchip.dead{background:#F6E4E7;color:#8A1020}
+/* ===== 관리 편집 2블록 ===== */
+.edit-block{border:1px solid #E8EAED;border-radius:9px;padding:14px;margin-bottom:12px}
+.edit-block.over{border-left:4px solid #00A86B}
+.edit-block.bsp{border-left:4px solid #0066FF}
+.eb-h{font-size:12px;font-weight:800;letter-spacing:.2px;margin-bottom:12px}
+.eb-h.over{color:#006644}
+.eb-h.bsp{color:#0052CC}
+/* ===== 상세 적용기간 ===== */
+.period-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px}
+.period-card{background:#fff;border:1px solid #E8EAED;border-radius:10px;padding:16px}
+.period-card.over{border-left:4px solid #00A86B}
+.period-card.bsp{border-left:4px solid #0066FF}
+.period-card .pc-h{font-size:12px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.period-card.over .pc-h{color:#006644}
+.period-card.bsp .pc-h{color:#0052CC}
+.period-card .pc-row{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:6px 0;border-bottom:1px solid #F1F5F9}
+.period-card .pc-row:last-child{border-bottom:none}
+.period-card .pc-row .k{color:#8A93A3}
+.period-card .pc-row .v{font-weight:700;color:#1B2A4A}
+@media(max-width:600px){.period-grid{grid-template-columns:1fr}}
+
 /* ===== 반응형 / 모바일 (기본 규칙 뒤에 두어 확실히 덮어쓰기) ===== */
 @media(max-width:768px){
   .detail-grid{grid-template-columns:1fr}
@@ -784,6 +819,15 @@ function getExpiryBadge(a){
   if(ey===cy&&em===cm)return'<span class="badge expiring">이달마감 ⚠</span>';
   return'';
 }
+// ===== 구조화 발권 종료일 기반 D-day · 정렬 =====
+function daysUntil(iso){if(!iso)return null;const t=new Date(iso+'T00:00:00');if(isNaN(t.getTime()))return null;const n=new Date();n.setHours(0,0,0,0);return Math.round((t-n)/86400000);}
+function urgencyCls(iso){const d=daysUntil(iso);if(d===null)return'';if(d<0)return'dead';if(d<=45)return'crit';if(d<=120)return'warn';return'calm';}
+function ddayText(iso){const d=daysUntil(iso);if(d===null)return'';if(d<0)return'만료';if(d===0)return'D-day';return'D-'+d;}
+function fmtEnd(iso){if(!iso)return'';const p=iso.split('-');return'~'+(+p[1])+'/'+(+p[2]);}
+function fmtRange(s,e){const a=s?((+s.split('-')[1])+'/'+(+s.split('-')[2])):'';const b=e?((+e.split('-')[1])+'/'+(+e.split('-')[2])):'';if(a&&b)return a+' ~ '+b;if(b)return'~ '+b;if(a)return a+' ~';return'-';}
+function hasBspGroup(a){return gn(a.bsp)>0||gn(a.soto)>0||gn(a.chd)>0||gn(a.inf)>0;}
+function airlineTracks(a){const t=[];if(gn(a.over)>0)t.push({key:'over',label:'오버컴',end:a.overTktEnd||''});if(hasBspGroup(a))t.push({key:'bsp',label:'BSP그룹',end:a.bspTktEnd||''});return t;}
+function airlineSoonest(a){const ends=airlineTracks(a).map(t=>t.end).filter(Boolean);if(!ends.length)return null;return ends.slice().sort()[0];}
 
 function toggleAcctCard(id, btn) {
   const el = document.getElementById(id);
@@ -850,6 +894,10 @@ function renderCards(){
   if(currentFilter==='bsp')list=list.filter(a=>gn(a.bsp)>0);
   else if(currentFilter==='over')list=list.filter(a=>gn(a.over)>0);
   else if(currentFilter==='kea')list=list.filter(a=>a.notes&&a.notes.includes('KE@A'));
+  // 만료 임박순 정렬: 발권 종료 빠른(과거 포함) 순 → 날짜 없는 항공사는 뒤로
+  list.sort((a,b)=>{const sa=airlineSoonest(a),sb=airlineSoonest(b);
+    if(sa&&sb)return sa<sb?-1:(sa>sb?1:a.code.localeCompare(b.code));
+    if(sa&&!sb)return -1; if(!sa&&sb)return 1; return a.code.localeCompare(b.code);});
   const grid=document.getElementById('cardGrid'),lv=document.getElementById('listView'),empty=document.getElementById('emptyState');
   if(!list.length){grid.innerHTML='';lv.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
@@ -859,7 +907,7 @@ function renderCards(){
     lv.innerHTML=`<table class="list-tbl"><thead><tr><th>항공사</th><th>BSP컴</th><th>오버컴</th><th>SOTO</th><th>재발행</th><th>소아</th><th>유아</th><th>비고</th></tr></thead><tbody>${list.map(a=>{
       const bn=gn(a.bsp),on=gn(a.over);
       return`<tr onclick="navigate('detail','${encodeURIComponent(a.code)}')">
-        <td style="font-weight:800;font-size:15px">${a.code}${getExpiryBadge(a)?`<br><span style="font-size:10px">${getExpiryBadge(a)}</span>`:''}</td>
+        <td style="font-weight:800;font-size:15px">${a.code}${airlineSoonest(a)?`<br><span class="dchip ${urgencyCls(airlineSoonest(a))}" style="font-size:9px">${ddayText(airlineSoonest(a))}</span>`:''}</td>
         <td class="cv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</td>
         <td class="cv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</td>
         <td class="cv">${fmtRate(a.soto)}</td>
@@ -874,15 +922,15 @@ function renderCards(){
   lv.style.display='none';
   grid.innerHTML=list.map(a=>{
     const bn=gn(a.bsp),on=gn(a.over),cls=on>0?'ov':(bn>0?'bsp-only':'nc');
-    const hist=historyData.filter(h=>h.code===a.code);
-    const badges=[];
-    if(bn>0)badges.push(`<span class="badge bsp">BSP ${fmtRate(a.bsp)}</span>`);
-    if(on>0)badges.push(`<span class="badge over">오버컴 ${fmtRate(a.over)}</span>`);
-    if(!bn&&!on)badges.push(`<span class="badge nocom">노컴</span>`);
-    const expiryBadge=getExpiryBadge(a);if(expiryBadge)badges.push(expiryBadge);
+    const soon=airlineSoonest(a);
+    const topChip=soon?`<span class="dchip ${urgencyCls(soon)}">${ddayText(soon)}</span>`:((!bn&&!on)?`<span class="badge nocom">노컴</span>`:'');
+    const tracks=airlineTracks(a).map(t=>{
+      const inner=t.end?`<span class="tperiod">발권 ${fmtEnd(t.end)}</span><span class="dchip ${urgencyCls(t.end)}">${ddayText(t.end)}</span>`:`<span class="tperiod none">발권기간 미설정</span>`;
+      return`<div class="etrack"><span class="tlbl ${t.key}">${t.label}</span>${inner}</div>`;
+    }).join('');
     const acct=getAccountCode(a.code);
     const acctHtml=acct?renderAccountCodeCard(acct,a.code):'';
-    return`<div class="card ${cls}" onclick="navigate('detail','${encodeURIComponent(a.code)}')"><div class="card-top"><span class="card-code">${a.code}</span><div class="badges">${badges.join('')}</div></div><div class="card-rates"><div class="rate"><div class="rl">BSP</div><div class="rv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</div></div><div class="rate"><div class="rl">오버컴</div><div class="rv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div><div class="rate"><div class="rl">SOTO</div><div class="rv ${gn(a.soto)>0?'hi':'ze'}">${fmtRate(a.soto)}</div></div></div><div class="card-tags">${reissueTag(a.code)}<div class="tag">소아 <b>${fmtRate(a.chd)}</b></div><div class="tag">유아 <b>${fmtRate(a.inf)}</b></div></div>${acctHtml}<div class="card-arrow">상세 보기 →</div></div>`;
+    return`<div class="card ${cls}" onclick="navigate('detail','${encodeURIComponent(a.code)}')"><div class="card-top"><span class="card-code">${a.code}</span>${topChip}</div><div class="card-rates"><div class="rate"><div class="rl">BSP</div><div class="rv ${bn>0?'hi':'ze'}">${fmtRate(a.bsp)}</div></div><div class="rate"><div class="rl">오버컴</div><div class="rv ${on>0?'hi':'ze'}">${fmtRate(a.over)}</div></div><div class="rate"><div class="rl">SOTO</div><div class="rv ${gn(a.soto)>0?'hi':'ze'}">${fmtRate(a.soto)}</div></div></div>${tracks?`<div class="etracks">${tracks}</div>`:''}<div class="card-tags">${reissueTag(a.code)}<div class="tag">소아 <b>${fmtRate(a.chd)}</b></div><div class="tag">유아 <b>${fmtRate(a.inf)}</b></div></div>${acctHtml}<div class="card-arrow">상세 보기 →</div></div>`;
   }).join('');
 }
 
@@ -930,6 +978,16 @@ function renderDetail(code){
       ${!hist.length?'<p style="color:#AAA;text-align:center;padding:30px">히스토리가 없습니다</p>':''}
     </div>`;
 
+  const tracksD=[];
+  if(on>0)tracksD.push({key:'over',label:'오버컴',ts:a.overTktStart,te:a.overTktEnd,ds:a.overDepStart,de:a.overDepEnd});
+  if(hasBspGroup(a))tracksD.push({key:'bsp',label:'BSP그룹',ts:a.bspTktStart,te:a.bspTktEnd,ds:a.bspDepStart,de:a.bspDepEnd});
+  const periodHtml=tracksD.length?`<div class="period-grid">${tracksD.map(t=>`
+    <div class="period-card ${t.key}">
+      <div class="pc-h">${t.label} 적용기간 ${t.te?`<span class="dchip ${urgencyCls(t.te)}">${ddayText(t.te)}</span>`:'<span class="dchip calm">기간 미설정</span>'}</div>
+      <div class="pc-row"><span class="k">발권기간</span><span class="v">${fmtRange(t.ts,t.te)}</span></div>
+      <div class="pc-row"><span class="k">출발기간</span><span class="v">${fmtRange(t.ds,t.de)}</span></div>
+    </div>`).join('')}</div>`:'';
+
   document.getElementById('detailContent').innerHTML=`
     <div class="detail-grid">
       <div class="info-card"><h3>커미션율 요약</h3><div class="rate-grid">
@@ -944,6 +1002,7 @@ function renderDetail(code){
         ${a.notes?`<div style="font-size:13px;color:#555;line-height:1.9;white-space:pre-wrap">${a.notes}</div>`:'<p style="color:#AAA;text-align:center;padding:20px">등록된 주의사항이 없습니다</p>'}
       </div>${editBtn}</div>
     </div>
+    ${periodHtml}
     ${histHtml}
     ${isAdmin?`
     <div style="background:#fff;border:1px solid #E8EAED;border-radius:10px;padding:20px;margin-bottom:24px">
@@ -995,16 +1054,35 @@ function loadAdminAirline(code){
   const a=airlines.find(x=>x.code===code);if(!a)return;
   const hist=historyData.filter(h=>h.code===code);
   document.getElementById('adminEditArea').innerHTML=`
-    <div class="edit-section"><h3>커미션율 수정 — ${a.code}</h3><div class="form-grid">
-      <div class="form-group"><label>BSP컴</label><input id="ed-bsp" value="${a.bsp}"></div>
-      <div class="form-group"><label>오버컴</label><input id="ed-over" value="${a.over}"></div>
-      <div class="form-group"><label>SOTO</label><input id="ed-soto" value="${a.soto}"></div>
-      <div class="form-group"><label>재발행</label><input id="ed-reissue" value="${a.reissue}"></div>
-      <div class="form-group"><label>소아(CHD)</label><input id="ed-chd" value="${a.chd}"></div>
-      <div class="form-group"><label>유아(INF)</label><input id="ed-inf" value="${a.inf}"></div>
+    <div class="edit-section"><h3>커미션율 · 적용기간 수정 — ${a.code}</h3>
+      <div class="edit-block over">
+        <div class="eb-h over">오버컴</div>
+        <div class="form-grid">
+          <div class="form-group"><label>오버컴 %</label><input id="ed-over" value="${a.over}"></div>
+          <div class="form-group"><label>발권 종료일 · 앞단표시</label><input type="date" id="ed-over-tend" value="${a.overTktEnd||''}"></div>
+          <div class="form-group"><label>발권 시작일</label><input type="date" id="ed-over-tstart" value="${a.overTktStart||''}"></div>
+          <div class="form-group"><label>출발 시작일 · 상세</label><input type="date" id="ed-over-dstart" value="${a.overDepStart||''}"></div>
+          <div class="form-group"><label>출발 종료일 · 상세</label><input type="date" id="ed-over-dend" value="${a.overDepEnd||''}"></div>
+        </div>
+      </div>
+      <div class="edit-block bsp">
+        <div class="eb-h bsp">BSP그룹 · BSP·SOTO·재발행·CHD·INF</div>
+        <div class="form-grid">
+          <div class="form-group"><label>BSP컴 %</label><input id="ed-bsp" value="${a.bsp}"></div>
+          <div class="form-group"><label>SOTO %</label><input id="ed-soto" value="${a.soto}"></div>
+          <div class="form-group"><label>재발행</label><input id="ed-reissue" value="${a.reissue}"></div>
+          <div class="form-group"><label>소아(CHD) %</label><input id="ed-chd" value="${a.chd}"></div>
+          <div class="form-group"><label>유아(INF) %</label><input id="ed-inf" value="${a.inf}"></div>
+          <div class="form-group"><label>발권 종료일 · 앞단표시</label><input type="date" id="ed-bsp-tend" value="${a.bspTktEnd||''}"></div>
+          <div class="form-group"><label>발권 시작일</label><input type="date" id="ed-bsp-tstart" value="${a.bspTktStart||''}"></div>
+          <div class="form-group"><label>출발 시작일 · 상세</label><input type="date" id="ed-bsp-dstart" value="${a.bspDepStart||''}"></div>
+          <div class="form-group"><label>출발 종료일 · 상세</label><input type="date" id="ed-bsp-dend" value="${a.bspDepEnd||''}"></div>
+        </div>
+      </div>
       <div class="form-group form-full"><label>비고 / 주의사항</label><textarea id="ed-notes" rows="3">${a.notes||''}</textarea></div>
-    </div><div class="btn-row"><button class="btn-primary" onclick="saveAirline('${code}')">저장</button></div></div>
-    <div class="edit-section"><h3>커미션 히스토리 관리</h3><div id="historyEditList">${hist.map((h,i)=>renderHistRow(h,i)).join('')}</div><div class="btn-add" onclick="addHistRow('${code}')">+ 히스토리 추가</div></div>`;
+      <div class="btn-row"><button class="btn-primary" onclick="saveAirline('${code}')">저장</button></div>
+    </div>
+    <div class="edit-section"><h3>커미션 히스토리 관리 <span style="font-size:11px;font-weight:400;color:#AAA">— 노선별 상세</span></h3><div id="historyEditList">${hist.map((h,i)=>renderHistRow(h,i)).join('')}</div><div class="btn-add" onclick="addHistRow('${code}')">+ 히스토리 추가</div></div>`;
 }
 
 function renderHistRow(h,i){return`<div class="history-edit-row" data-idx="${i}"><input value="${h.route||''}" placeholder="노선" data-field="route"><input value="${h.bsp||''}" placeholder="BSP" data-field="bsp"><input value="${h.overEY||''}" placeholder="오버컴" data-field="overEY"><input value="${h.ticketing||''}" placeholder="발권기간" data-field="ticketing"><input value="${h.departure||''}" placeholder="출발기간" data-field="departure"><input value="${h.accountCode||''}" placeholder="Account Code" data-field="accountCode" style="font-family:monospace"><textarea placeholder="비고" data-field="notes">${h.notes||''}</textarea><button class="btn-remove" onclick="removeHistRow(${i})">×</button></div>`;}
@@ -1015,15 +1093,15 @@ function removeHistRow(i){historyData.splice(i,1);const code=document.getElement
 async function saveAirline(code){
   if(!isAdmin){showToast('관리자만 저장할 수 있습니다','error');return;}
   const a=airlines.find(x=>x.code===code);if(!a)return;
+  const gv=id=>{const e=document.getElementById(id);return e?e.value:'';};
+  const dateFields=['overTktStart','overTktEnd','overDepStart','overDepEnd','bspTktStart','bspTktEnd','bspDepStart','bspDepEnd'];
   const old={bsp:a.bsp,over:a.over,soto:a.soto,reissue:a.reissue,chd:a.chd,inf:a.inf,notes:a.notes};
+  dateFields.forEach(f=>old[f]=a[f]||'');
   const next={
-    bsp:document.getElementById('ed-bsp').value,
-    over:document.getElementById('ed-over').value,
-    soto:document.getElementById('ed-soto').value,
-    reissue:document.getElementById('ed-reissue').value,
-    chd:document.getElementById('ed-chd').value,
-    inf:document.getElementById('ed-inf').value,
-    notes:document.getElementById('ed-notes').value
+    bsp:gv('ed-bsp'),over:gv('ed-over'),soto:gv('ed-soto'),reissue:gv('ed-reissue'),
+    chd:gv('ed-chd'),inf:gv('ed-inf'),notes:gv('ed-notes'),
+    overTktStart:gv('ed-over-tstart'),overTktEnd:gv('ed-over-tend'),overDepStart:gv('ed-over-dstart'),overDepEnd:gv('ed-over-dend'),
+    bspTktStart:gv('ed-bsp-tstart'),bspTktEnd:gv('ed-bsp-tend'),bspDepStart:gv('ed-bsp-dstart'),bspDepEnd:gv('ed-bsp-dend')
   };
   const rows=document.querySelectorAll('#historyEditList .history-edit-row'),codeHist=[];
   rows.forEach(row=>{codeHist.push({code,route:row.querySelector('[data-field="route"]').value,bsp:row.querySelector('[data-field="bsp"]').value,overEY:row.querySelector('[data-field="overEY"]').value,overBZ:'',ticketing:row.querySelector('[data-field="ticketing"]').value,departure:row.querySelector('[data-field="departure"]').value,notes:row.querySelector('[data-field="notes"]').value,accountCode:row.querySelector('[data-field="accountCode"]').value||'',b2g:false});});
@@ -1036,7 +1114,7 @@ async function saveAirline(code){
     oldHist.forEach(d=>batch.delete(d.ref));
     codeHist.forEach(h=>batch.set(db.collection('history').doc(),h));
     await batch.commit();
-    const fields=['bsp','over','soto','reissue','chd','inf','notes'];
+    const fields=['bsp','over','soto','reissue','chd','inf','notes',...dateFields];
     for(const f of fields){if(String(old[f])!==String(next[f]))await appendAuditLog(code,f,old[f],next[f]);}
     showToast(`${code} 저장 완료`,'success');
   }catch(e){showToast(`${code} 저장 실패: ${e.message}`,'error');}
