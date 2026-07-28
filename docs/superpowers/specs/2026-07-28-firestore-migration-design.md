@@ -39,17 +39,26 @@
 
 ## 4. 데이터 모델 (Firestore 컬렉션)
 
-기존 시트 3개 탭 → 컬렉션 3개로 1:1 대응.
+기존 시트 4개 탭 → 컬렉션 4개로 1:1 대응.
 
 - **`airlines/{code}`** — 문서 ID = 항공사 코드
-  - 필드: `bsp, over, soto, reissue, chd, inf, notes` (문자열), `images` (배열: `{url, label}`)
+  - 필드: `bsp, over, soto, reissue, chd, inf, notes` (문자열), `images` (배열: `{id,url,viewUrl,label,mimeType}`)
   - 기존 시트 `대시보드_커미션` 컬럼과 대응 (`code`는 문서 ID로 승격)
 - **`history/{autoId}`** — 자동 ID
   - 필드: `code, route, bsp, overEY, overBZ, ticketing, departure, notes, accountCode, b2g`
   - 기존 `대시보드_히스토리` 대응. 조회 시 `where('code','==',...)` 필터
 - **`auditLog/{autoId}`** — 자동 ID
   - 필드: `timestamp(서버시간), userName, userEmail, code, field, before, after`
-  - 기존 `변경이력` 대응. 관리자 저장 시 변경 필드별 1건 추가
+  - 기존 `변경이력` 대응. 관리자 저장 시 변경 필드별 1건 추가. 조회는 `where('code','==',...)` 후 최신순.
+- **`notices/{autoId}`** — 자동 ID (⚠️ 최초 계획 누락분, 반영)
+  - 필드: `title, body, urgent(bool), banner(bool), date(문자열)`
+  - 기존 `공지사항` 시트 대응. 종/드롭다운/배너 UI + 최고관리자(`haram.an`) 등록·삭제.
+  - 기존 정수 `id`는 문서 ID(autoId)로 대체.
+
+### 4.1 추가 결정 (2026-07-28)
+- **이미지 첨부**: 구글 드라이브 유지. 단, 드라이브 업로드에 필요한 액세스 토큰은 **Firebase Auth `GoogleAuthProvider`에 `drive.file` 스코프를 추가**해 로그인 시 획득한다(`result.credential.accessToken`). 토큰 만료 시 업로드 시점에 재-consent 팝업(관리자·비상시적 동작이라 허용). 커미션 데이터 자체는 Firestore라 토큰과 무관.
+- **새 항공사 추가**: 관리 패널에 "새 항공사 추가" 기능 신설(코드+초기값 입력 → `airlines/{code}` 생성). 기존엔 HTML 하드코딩으로만 가능했음. 삭제 기능은 현행에 없으므로 범위 밖.
+- **최고관리자(super admin)**: `haram.an@myrealtrip.com`. 공지 관리·관리자 목록 UI는 최고관리자만 노출(현행 유지).
 
 ## 5. 인증 / 권한
 

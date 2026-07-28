@@ -429,6 +429,31 @@ git push origin main
 
 ---
 
+## 범위 보정 (2026-07-28, 코드 정독 후)
+
+초기 계획이 아래를 누락했음. 각 태스크에 다음을 포함해 진행한다.
+
+**A. 공지사항(notices) — Task 5·6·7 확장**
+- 관련 함수: `renderNotices`(644), `toggleNoticeDropdown`(671), `renderAdminNotices`(695), `saveNoticesToSheet`(710), `addNotice`(720), `removeNotice`(737), 로드부(`loadSheetsData` 내 537-543).
+- 읽기: `db.collection('notices').orderBy('date','desc').onSnapshot(...)` → 전역 `notices[]` → `renderNotices()`.
+- 쓰기: `addNotice` → `notices.add({title,body,urgent,banner,date})`; `removeNotice(id)` → `notices.doc(id).delete()`; `saveNoticesToSheet` 제거(개별 add/delete로 대체). `id`는 문서 ID(문자열)로.
+- seed: 기존 `공지사항` 데이터가 있으면 seed. 없으면 빈 컬렉션(공지는 휘발성이라 필수 아님).
+- 게이팅: 등록·삭제 UI는 최고관리자(`SUPER_ADMIN`)만(현행 유지).
+
+**B. 변경이력 조회(auditLog read) — Task 5/7**
+- `loadAuditLog(code)`(584): 시트 읽기 → `db.collection('auditLog').where('code','==',code).orderBy('timestamp','desc').get()` 로 교체. (복합 인덱스 필요 시 콘솔 링크로 생성 — 단일 where+orderBy는 자동 인덱스로 충분할 수 있음, 검증.)
+
+**C. 이미지 드라이브 업로드 — Task 4/7**
+- `handleFileUpload`(598)/`uploadFileToDrive`(619)/`removeFile`(630)는 `adminAccessToken`(드라이브 스코프) 의존.
+- Task 4에서 `provider.addScope('https://www.googleapis.com/auth/drive.file')` 추가하고, `signInWithPopup` 결과의 `result.credential.accessToken`을 전역 `driveToken`에 저장. 업로드 시 이 토큰 사용.
+- 토큰 없음/만료(401) 시 업로드 직전 `signInWithPopup` 재실행으로 갱신 후 재시도(1회). 기존 `ensureAdminToken` 자리를 `ensureDriveToken`으로 대체.
+
+**D. 새 항공사 추가 — Task 7 확장**
+- 신규: 관리 패널에 "새 항공사 추가" 입력(코드 + 초기 커미션값) → `db.collection('airlines').doc(code).set({...})`. 코드 중복 시 경고. 삭제 UI는 범위 밖.
+
+**E. 정리 — Task 8**
+- 미사용 상수 추가 제거: `GAS_URL`, `GAS_SECRET`(죽은 상수), `NOTICE_SHEET`, `SUPER_ADMIN`은 로직에서 계속 쓰므로 유지. `REISSUE_APPLICABLE`는 UI 로직이라 유지.
+
 ## Self-Review (계획 자체 점검)
 
 - **Spec coverage:** 설계 §1~10 각 항목 → Task 매핑. 문제4개(쓰기실패/토큰만료/착시/읽기지연)=Task4~7·9 검증. 무료/이미지유지=Global Constraints. 데이터모델=Task5~7. 권한=Task3. 이관=Task6. 사람준비물=Task1. 성공기준=Task9 Step4. 누락 없음.
