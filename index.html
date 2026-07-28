@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>항공사 커미션 대시보드 | 항공사업팀</title>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <style>
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
 *{margin:0;padding:0;box-sizing:border-box}
@@ -304,6 +306,7 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
       <h1 style="font-size:22px;font-weight:700;color:#1B2A4A">커미션 관리</h1>
       <p style="color:#888;font-size:13px;margin-top:4px">항공사별 커미션 정보를 수정하고 아카이빙 자료를 관리하세요</p>
     </div>
+    <div id="seedBox"></div>
     <div class="edit-section" style="margin-bottom:16px;display:none" id="adminMgmtSection">
       <h3>관리자 계정 <span style="font-size:11px;font-weight:400;color:#AAA">— 최고 관리자만 열람</span></h3>
       <div id="adminEmailList"></div>
@@ -321,7 +324,8 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
     </div>
     <div class="admin-toolbar">
       <select id="adminAirlineSelect" onchange="loadAdminAirline(this.value)"><option value="">항공사 선택...</option></select>
-      <button class="btn-secondary" onclick="openSheetDirect()">Google Sheets에서 직접 편집</button>
+      <input type="text" id="newAirlineCode" placeholder="새 항공사 코드 (예: TW)" style="padding:9px 12px;border:1.5px solid #D0D5DD;border-radius:7px;font-size:13px;width:180px;text-transform:uppercase">
+      <button class="btn-secondary" onclick="addAirlineDoc()">+ 새 항공사 추가</button>
     </div>
     <div id="adminEditArea"></div>
   </div>
@@ -333,82 +337,56 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:#F7F8FA;color:
 </div>
 
 <script>
-const SHEET_ID='1pmVuYSQnrb1lf5Oqb4PUn99tHQvzNO32N_4TeZKGXDc';
-const SHEET_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?gid=0#gid=0`;
-const CLIENT_ID='396719596652-g0ipsj01avpaaufoad7pj169s1doicia.apps.googleusercontent.com';
+const firebaseConfig={
+  apiKey:"AIzaSyCbtT6uh9N1mR2H5-WCR8hKfEg20drS6qk",
+  authDomain:"mrt-air-comm.firebaseapp.com",
+  projectId:"mrt-air-comm",
+  storageBucket:"mrt-air-comm.firebasestorage.app",
+  messagingSenderId:"919759398258",
+  appId:"1:919759398258:web:d9978847ba36be883429eb"
+};
+firebase.initializeApp(firebaseConfig);
+const db=firebase.firestore();
+const auth=firebase.auth();
+
 const ALLOWED_DOMAINS=['myrealtrip.com','aicx.kr'];
-const AUDIT_SHEET_NAME='변경이력';
-const COMM_SHEET='대시보드_커미션';
-const HIST_SHEET='대시보드_히스토리';
-const NOTICE_SHEET='공지사항';
 const SUPER_ADMIN='haram.an@myrealtrip.com';
 const REISSUE_APPLICABLE=new Set(['BR','8M','NX','NH','VJ']);
-const ADMIN_EMAILS=['haram.an@myrealtrip.com','sieon.choi@myrealtrip.com','hyerim.kim@myrealtrip.com']; // 관리자 추가 시 여기에 이메일 추가
-const GAS_URL='https://script.google.com/a/macros/myrealtrip.com/s/AKfycbx-vaN-cZphLdd9WVl1CbuvfkTu73BeNlddV80zkS8sop2uR4mUw6Xr06djl8oHJ-Ve/exec'; // Apps Script 배포 후 웹앱 URL 붙여넣기
-const GAS_SECRET='mrt-airline-comm-2026'; // gas-webapp.js의 GAS_SECRET과 동일
+// 관리자 추가 시: 아래 배열 + firestore.rules 의 isAdmin 목록 둘 다에 이메일 추가
+const ADMIN_EMAILS=['haram.an@myrealtrip.com','sieon.choi@myrealtrip.com','hyerim.kim@myrealtrip.com'];
 
-let airlines=[],historyData=[],currentUser=null,isAdmin=false,currentFilter='over',currentSearch='',currentView='card';
-let tokenClient=null,accessToken=null,adminAccessToken=null;
+let airlines=[],historyData=[],notices=[],currentUser=null,isAdmin=false,currentFilter='over',currentSearch='',currentView='card';
 
-// AUTH
-let adminTokenClient=null;
-function initGoogleAuth(){
-  if(typeof google==='undefined'||!google.accounts||!google.accounts.oauth2){setTimeout(initGoogleAuth,100);return;}
-  // 일반 로그인: 프로필만 요청 (Sheets는 관리자 토큰으로만 접근)
-  tokenClient=google.accounts.oauth2.initTokenClient({
-    client_id:CLIENT_ID,
-    scope:'email profile',
-    callback:handleToken
+// AUTH (Firebase)
+function initAuth(){
+  auth.onAuthStateChanged(async user=>{
+    if(!user){onLoggedOut();return;}
+    const email=(user.email||'').toLowerCase();
+    if(!ALLOWED_DOMAINS.some(d=>email.endsWith('@'+d))){
+      showToast('@myrealtrip.com 또는 @aicx.kr 계정만 가능','error');
+      await auth.signOut();return;
+    }
+    currentUser={name:user.displayName||email,email};
+    isAdmin=ADMIN_EMAILS.includes(email);
+    document.getElementById('loginScreen').style.display='none';
+    updateAuthUI();
+    subscribeData();
+    handleRoute();
+    showToast(currentUser.name+'님 환영합니다','success');
   });
-  // 관리자용: Drive 업로드 + Sheets 직접 쓰기 스코프
-  adminTokenClient=google.accounts.oauth2.initTokenClient({
-    client_id:CLIENT_ID,
-    scope:'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file',
-    callback:handleAdminToken
-  });
-}
-function handleAdminToken(resp){
-  if(resp.error){showToast('권한 요청 실패: '+resp.error,'error');return;}
-  adminAccessToken=resp.access_token;
-  pendingAdminSave&&pendingAdminSave();
-  pendingAdminSave=null;
-}
-let pendingAdminSave=null;
-async function requestAdminAccess(callback){
-  if(adminAccessToken){callback();return;}
-  pendingAdminSave=callback;
-  adminTokenClient.requestAccessToken();
-}
-async function handleToken(resp){
-  if(resp.error){showToast('로그인 실패','error');return;}
-  accessToken=resp.access_token;
-  const info=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+accessToken}}).then(r=>r.json());
-  if(!ALLOWED_DOMAINS.some(d=>info.email.endsWith('@'+d))){showToast('@myrealtrip.com 또는 @aicx.kr 계정만 가능','error');accessToken=null;return;}
-  currentUser={name:info.name,email:info.email};
-  isAdmin=ADMIN_EMAILS.includes(info.email);
-  document.getElementById('loginScreen').style.display='none';
-  updateAuthUI();
-  renderStats();renderCards();
-  showToast(info.name+'님 환영합니다','success');
-  if(isAdmin){
-    await initDataSheets();
-    await initAuditSheet();
-    renderStats();renderCards();
-    if(location.hash==='#admin')showAdminPanel();
-  }
-  if(location.hash==='#admin'&&isAdmin)showAdminPanel();
-  loadSheetsData().then(()=>{renderStats();renderCards();});
 }
 function googleLogin(){
-  if(!tokenClient){showToast('잠시 후 다시 시도하세요','error');return;}
-  tokenClient.requestAccessToken({prompt:'select_account'});
+  const provider=new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({prompt:'select_account'});
+  auth.signInWithPopup(provider).catch(e=>showToast('로그인 실패: '+e.message,'error'));
 }
-function logout(){
-  if(accessToken&&currentUser){google.accounts.oauth2.revoke(accessToken,()=>{});}
-  if(adminAccessToken){google.accounts.oauth2.revoke(adminAccessToken,()=>{});}
-  accessToken=null;adminAccessToken=null;currentUser=null;isAdmin=false;
+async function logout(){try{await auth.signOut();}catch(e){}}
+function onLoggedOut(){
+  unsubscribeData();
+  currentUser=null;isAdmin=false;
+  airlines=[];historyData=[];notices=[];
+  updateAuthUI();renderNotices();renderStats();renderCards();
   document.getElementById('loginScreen').style.display='flex';
-  updateAuthUI();
   if(location.hash==='#admin'){document.getElementById('adminLoginPrompt').style.display='block';document.getElementById('adminPanel').classList.remove('visible');}
 }
 function updateAuthUI(){
@@ -435,212 +413,81 @@ function handleRoute(){
 }
 window.addEventListener('hashchange',handleRoute);
 
-// SHEETS API DIRECT HELPERS (GAS 대신 admin OAuth 토큰으로 직접 호출)
-
-// admin 토큰 확보: 없으면 팝업으로 동의 요청 (새 스코프 포함), 있으면 즉시 반환
-function ensureAdminToken(){
-  return new Promise((resolve,reject)=>{
-    if(adminAccessToken){resolve();return;}
-    const origCb=adminTokenClient.callback;
-    adminTokenClient.callback=resp=>{
-      adminTokenClient.callback=origCb;
-      if(resp.error){reject(new Error('Google 권한 요청 실패: '+resp.error));return;}
-      adminAccessToken=resp.access_token;
-      resolve();
-    };
-    adminTokenClient.requestAccessToken(); // 팝업 허용: 미동의 스코프면 동의 화면 표시
-  });
+// FIRESTORE 실시간 구독 (로그인 성공 후 호출)
+let _unsubs=[];
+function subscribeData(){
+  if(_unsubs.length)return;
+  _unsubs.push(db.collection('airlines').onSnapshot(snap=>{
+    airlines=snap.docs.map(d=>({code:d.id,...d.data()}));
+    airlines.sort((a,b)=>a.code.localeCompare(b.code));
+    renderStats();renderCards();
+    if(document.getElementById('adminPanel').classList.contains('visible')){refreshAdminAirlineSelect();renderSeedBox();}
+    const h=location.hash||'';
+    if(h.startsWith('#detail/'))renderDetail(decodeURIComponent(h.split('/')[1]));
+  },e=>showToast('데이터 읽기 실패: '+e.message,'error')));
+  _unsubs.push(db.collection('history').onSnapshot(snap=>{
+    historyData=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderStats();renderCards();
+    const h=location.hash||'';
+    if(h.startsWith('#detail/'))renderDetail(decodeURIComponent(h.split('/')[1]));
+  },e=>console.error('history read error:',e)));
+  _unsubs.push(db.collection('notices').onSnapshot(snap=>{
+    notices=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderNotices();
+    if(document.getElementById('adminPanel').classList.contains('visible'))renderAdminNotices();
+  },e=>console.error('notices read error:',e)));
+}
+function unsubscribeData(){_unsubs.forEach(u=>{try{u();}catch(e){}});_unsubs=[];}
+function refreshAdminAirlineSelect(){
+  const s=document.getElementById('adminAirlineSelect');if(!s)return;
+  const cur=s.value;
+  s.innerHTML='<option value="">항공사 선택...</option>'+airlines.map(a=>`<option value="${a.code}">${a.code}</option>`).join('');
+  if(cur)s.value=cur;
 }
 
-// Sheets API 쓰기 헬퍼 (401시 토큰 재요청 후 1회 재시도)
-async function sheetsApiWrite(url,body,method='PUT',retry=false){
-  await ensureAdminToken();
-  const r=await fetch(url,{method,headers:{Authorization:'Bearer '+adminAccessToken,'Content-Type':'application/json'},body:JSON.stringify(body)});
-  if(r.status===401&&!retry){adminAccessToken=null;return sheetsApiWrite(url,body,method,true);}
-  if(!r.ok){const t=await r.text();throw new Error('Sheets API '+r.status+': '+t.slice(0,200));}
-  return r.json();
-}
-
-// 행 추가
-async function sheetsAppend(sheetName,values){
-  const url=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(sheetName+'!A1')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
-  await sheetsApiWrite(url,{majorDimension:'ROWS',values},'POST');
-}
-
-// 범위 전체 덮어쓰기 (clear → write)
-async function sheetsUpdate(sheetName,range,values){
-  const clearUrl=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(sheetName+'!A1:Z10000')}:clear`;
-  await sheetsApiWrite(clearUrl,{},'POST');
-  const writeUrl=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(sheetName+'!'+range)}?valueInputOption=RAW`;
-  await sheetsApiWrite(writeUrl,{range:sheetName+'!'+range,majorDimension:'ROWS',values});
-}
-
-// 항공사 코드로 행 직접 업데이트 (admin 토큰으로 A열 읽어 행 번호 조회 → 쓰기)
-async function updateAirlineRowDirect(code,values){
-  await ensureAdminToken();
-  const readUrl=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(COMM_SHEET+'!A:A')}`;
-  const r=await fetch(readUrl,{headers:{Authorization:'Bearer '+adminAccessToken}});
-  if(!r.ok){
-    const errBody=await r.json().catch(()=>null);
-    const msg=(errBody&&errBody.error&&errBody.error.message)||'unknown';
-    throw new Error('시트 읽기 실패 ('+r.status+'): '+msg);
-  }
-  const data=await r.json();
-  const col=data.values||[];
-  const rowIdx=col.findIndex((row,i)=>i>0&&row[0]===code);
-  if(rowIdx<0)throw new Error('항공사 코드를 시트에서 찾을 수 없습니다: '+code);
-  const range=`${COMM_SHEET}!A${rowIdx+1}`;
-  const writeUrl=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=RAW`;
-  await sheetsApiWrite(writeUrl,{range,majorDimension:'ROWS',values});
-}
-// 공개 읽기용 (loadSheetsData에서 사용 — 토큰 불필요)
-async function sheetsGetValuesPublic(sheetName){
-  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=0&sheet=${encodeURIComponent(sheetName)}`;
-  try{
-    const resp=await fetch(url);
-    if(!resp.ok)return null;
-    const text=await resp.text();
-    const jsonStr=text.replace(/^[^(]+\(/,'').replace(/\);\s*$/,'');
-    const json=JSON.parse(jsonStr);
-    if(!json.table||!json.table.rows)return null;
-    const values=json.table.rows.map(row=>(row.c||[]).map(cell=>(cell&&cell.v!==null&&cell.v!==undefined)?String(cell.v):''));
-    return {values};
-  }catch(e){console.error('sheetsGetValuesPublic error:',e);return null;}
-}
-
-async function loadSheetsData(){
-  try{
-    const d=await sheetsGetValuesPublic(COMM_SHEET);
-    if(d&&d.values&&d.values.length>1){
-      d.values.slice(1).forEach(row=>{
-        if(!row[0])return;
-        const a=airlines.find(x=>x.code===row[0]);
-        if(a){
-          if(row[1]!==undefined)a.bsp=row[1];
-          if(row[2]!==undefined)a.over=row[2];
-          if(row[3]!==undefined)a.soto=row[3];
-          if(row[4]!==undefined)a.reissue=row[4];
-          if(row[5]!==undefined)a.chd=row[5];
-          if(row[6]!==undefined)a.inf=row[6];
-          if(row[7]!==undefined)a.notes=row[7];
-          if(row[8]){try{a.images=JSON.parse(row[8]);}catch(e){}}
-        }
-      });
-    }
-    const h=await sheetsGetValuesPublic(HIST_SHEET);
-    if(h&&h.values&&h.values.length>1){
-      historyData=h.values.slice(1).filter(r=>r[0]).map(r=>({
-        code:r[0]||'',route:r[1]||'',bsp:r[2]||'',overEY:r[3]||'',overBZ:r[4]||'',
-        ticketing:r[5]||'',departure:r[6]||'',notes:r[7]||'',accountCode:r[8]||'',b2g:false
-      }));
-    }
-    const nv=await sheetsGetValuesPublic(NOTICE_SHEET);
-    if(nv&&nv.values&&nv.values.length>1){
-      notices=nv.values.slice(1).filter(r=>r[0]).map(r=>({
-        id:parseInt(r[0])||0,title:r[1]||'',body:r[2]||'',
-        urgent:r[3]==='true'||r[3]==='TRUE',banner:r[4]==='true'||r[4]==='TRUE',date:r[5]||''
-      }));
-      nextNoticeId=notices.length?Math.max(...notices.map(n=>n.id))+1:1;
-      renderNotices();
-    }
-  }catch(e){console.error('loadSheetsData error:',e);}
-}
-async function initDataSheets(){
-  if(!isAdmin)return;
-  try{
-    await ensureAdminToken();
-    const meta=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties.title`,{headers:{Authorization:'Bearer '+adminAccessToken}}).then(r=>r.json());
-    const titles=(meta.sheets||[]).map(s=>s.properties.title);
-    async function ensureSheet(name,data){
-      if(!titles.includes(name)){
-        await sheetsApiWrite(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`,{requests:[{addSheet:{properties:{title:name}}}]},'POST');
-        await sheetsUpdate(name,'A1',data);
-      }
-    }
-    await ensureSheet(COMM_SHEET,[['code','bsp','over','soto','reissue','chd','inf','notes','images'],...airlines.map(a=>[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,'[]'])]);
-    await ensureSheet(HIST_SHEET,[['code','route','bsp','overEY','overBZ','ticketing','departure','notes','accountCode'],...historyData.map(h=>[h.code,h.route,h.bsp,h.overEY,h.overBZ||'',h.ticketing,h.departure,h.notes,h.accountCode||''])]);
-    await ensureSheet(NOTICE_SHEET,[['id','title','body','urgent','banner','date']]);
-  }catch(e){console.error('initDataSheets error:',e);}
-}
-
-async function initAuditSheet(){
-  if(!isAdmin)return;
-  try{
-    await ensureAdminToken();
-    const meta=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties.title`,{headers:{Authorization:'Bearer '+adminAccessToken}}).then(r=>r.json());
-    const titles=(meta.sheets||[]).map(s=>s.properties.title);
-    if(!titles.includes(AUDIT_SHEET_NAME)){
-      await sheetsApiWrite(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`,{requests:[{addSheet:{properties:{title:AUDIT_SHEET_NAME}}}]},'POST');
-      await sheetsAppend(AUDIT_SHEET_NAME,[['날짜/시간','변경자','이메일','항공사','변경항목','이전값','변경값']]);
-    }
-  }catch(e){console.error('initAuditSheet error:',e);}
-}
 async function appendAuditLog(code,field,before,after){
   if(!currentUser||!isAdmin)return;
-  const now=new Date().toLocaleString('ko-KR',{timeZone:'Asia/Seoul'});
-  try{await sheetsAppend(AUDIT_SHEET_NAME,[[now,currentUser.name,currentUser.email,code,field,String(before),String(after)]]);}
-  catch(e){console.error('appendAuditLog error:',e);}
+  try{
+    await db.collection('auditLog').add({
+      timestamp:firebase.firestore.FieldValue.serverTimestamp(),
+      userName:currentUser.name,userEmail:currentUser.email,
+      code,field,before:String(before),after:String(after)
+    });
+  }catch(e){console.error('appendAuditLog error:',e);}
 }
 async function loadAuditLog(code){
   if(!currentUser||!isAdmin)return[];
   try{
-    await ensureAdminToken();
-    const url=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(AUDIT_SHEET_NAME+'!A:G')}`;
-    const r=await fetch(url,{headers:{Authorization:'Bearer '+adminAccessToken}});
-    if(!r.ok)return[];
-    const data=await r.json();
-    if(!data.values||data.values.length<=1)return[];
-    return data.values.slice(1).filter(r=>r[3]===code).reverse();
-  }catch(e){return[];}
+    const snap=await db.collection('auditLog').where('code','==',code).get();
+    const rows=snap.docs.map(d=>d.data());
+    rows.sort((a,b)=>{const ta=(a.timestamp&&a.timestamp.seconds)||0;const tb=(b.timestamp&&b.timestamp.seconds)||0;return tb-ta;});
+    return rows;
+  }catch(e){console.error('loadAuditLog error:',e);return[];}
+}
+// 최초 1회 데이터 적재 — 관리자 로그인 후 브라우저 콘솔에서 seedFromEmbedded() 실행. 컬렉션이 비어있을 때만 동작(멱등).
+async function seedFromEmbedded(){
+  if(!isAdmin){showToast('관리자만 seed 가능','error');return;}
+  const existing=await db.collection('airlines').limit(1).get();
+  if(!existing.empty){showToast('이미 데이터가 있어 seed를 건너뜁니다','');return;}
+  loadEmbeddedData();
+  const batch=db.batch();
+  airlines.forEach(a=>{
+    batch.set(db.collection('airlines').doc(a.code),{
+      bsp:a.bsp,over:a.over,soto:a.soto,reissue:a.reissue,chd:a.chd,inf:a.inf,notes:a.notes
+    });
+  });
+  await batch.commit();
+  for(const h of historyData){
+    await db.collection('history').add({
+      code:h.code,route:h.route,bsp:h.bsp,overEY:h.overEY,overBZ:h.overBZ||'',
+      ticketing:h.ticketing,departure:h.departure,notes:h.notes,accountCode:h.accountCode||'',b2g:!!h.b2g
+    });
+  }
+  showToast('초기 데이터 seed 완료 ('+airlines.length+'개 항공사)','success');
 }
 
-// DRIVE FILE UPLOAD
-async function handleFileUpload(code,input){
-  const file=input.files[0];if(!file)return;
-  const prog=document.getElementById('uploadProgress');
-  prog.style.display='block';
-  try{
-    const uploaded=await uploadFileToDrive(file,code);
-    const a=airlines.find(x=>x.code===code);
-    if(!a.images)a.images=[];
-    a.images.push(uploaded);
-    appendAuditLog(code,'파일추가','-',uploaded.label);
-    await saveImages(code);
-    renderDetail(code);
-    showToast('파일이 업로드되었습니다','success');
-  }catch(e){
-    console.error('Upload error:',e);
-    showToast('업로드 실패: '+e.message,'error');
-  }finally{
-    prog.style.display='none';
-    input.value='';
-  }
-}
-async function uploadFileToDrive(file,code){
-  if(!adminAccessToken)throw new Error('관리자 권한이 필요합니다');
-  const metadata={name:`[${code}] ${file.name}`};
-  const form=new FormData();
-  form.append('metadata',new Blob([JSON.stringify(metadata)],{type:'application/json'}));
-  form.append('file',file);
-  const res=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType',{method:'POST',headers:{Authorization:'Bearer '+adminAccessToken},body:form}).then(r=>r.json());
-  if(!res.id)throw new Error(res.error?.message||'Upload failed');
-  await fetch(`https://www.googleapis.com/drive/v3/files/${res.id}/permissions`,{method:'POST',headers:{Authorization:'Bearer '+adminAccessToken,'Content-Type':'application/json'},body:JSON.stringify({role:'reader',type:'anyone'})});
-  return{id:res.id,label:file.name,url:`https://drive.google.com/uc?id=${res.id}`,viewUrl:`https://drive.google.com/file/d/${res.id}/view`,mimeType:file.type};
-}
-function removeFile(code,idx){
-  const a=airlines.find(x=>x.code===code);if(!a||!a.images)return;
-  const removed=a.images[idx];
-  a.images.splice(idx,1);
-  if(removed)appendAuditLog(code,'파일삭제',removed.label,'-');
-  saveImages(code);
-  renderDetail(code);
-  showToast('파일이 삭제되었습니다');
-}
 
 // NOTICES
-let notices = [];
-let nextNoticeId = 1;
-
 function renderNotices() {
   const list = document.getElementById('noticeList');
   const badge = document.getElementById('noticeBadge');
@@ -665,6 +512,8 @@ function renderNotices() {
   if (bannerNotice) {
     bannerText.textContent = `${bannerNotice.title}${bannerNotice.body ? ' — ' + bannerNotice.body : ''}`;
     banner.classList.remove('hidden');
+  } else {
+    banner.classList.add('hidden');
   }
 }
 
@@ -703,43 +552,33 @@ function renderAdminNotices() {
         ${n.body?`<div style="font-size:12px;color:#555">${n.body}</div>`:''}
       </div>
       <span style="font-size:11px;color:#AAA;white-space:nowrap">${n.date}</span>
-      <button onclick="removeNotice(${n.id})" style="background:none;border:none;color:#E53E3E;cursor:pointer;font-size:18px;padding:0 4px">×</button>
+      <button onclick="removeNotice('${n.id}')" style="background:none;border:none;color:#E53E3E;cursor:pointer;font-size:18px;padding:0 4px">×</button>
     </div>`).join('');
 }
 
-async function saveNoticesToSheet(){
-  if(!isAdmin)return;
-  try{
-    await sheetsUpdate(NOTICE_SHEET,'A1',[
-      ['id','title','body','urgent','banner','date'],
-      ...notices.map(n=>[n.id,n.title,n.body,String(n.urgent),String(n.banner),n.date])
-    ]);
-  }catch(e){console.error('saveNoticesToSheet error:',e);}
-}
-
-function addNotice() {
+async function addNotice() {
+  if(!isAdmin){showToast('관리자만 등록할 수 있습니다','error');return;}
   const title = document.getElementById('noticeTitle').value.trim();
   const body = document.getElementById('noticeBody').value.trim();
   const urgent = document.getElementById('noticeUrgent').checked;
   const banner = document.getElementById('noticeBannerChk').checked;
   if (!title) { showToast('제목을 입력하세요', 'error'); return; }
-  notices.unshift({ id: nextNoticeId++, title, body, urgent, banner, date: new Date().toLocaleDateString('ko-KR') });
-  document.getElementById('noticeTitle').value = '';
-  document.getElementById('noticeBody').value = '';
-  document.getElementById('noticeUrgent').checked = false;
-  document.getElementById('noticeBannerChk').checked = false;
-  renderNotices();
-  renderAdminNotices();
-  showToast('공지사항이 등록되었습니다', 'success');
-  saveNoticesToSheet();
+  try{
+    await db.collection('notices').add({title,body,urgent,banner,date:new Date().toLocaleDateString('ko-KR')});
+    document.getElementById('noticeTitle').value = '';
+    document.getElementById('noticeBody').value = '';
+    document.getElementById('noticeUrgent').checked = false;
+    document.getElementById('noticeBannerChk').checked = false;
+    showToast('공지사항이 등록되었습니다', 'success');
+  }catch(e){showToast('공지 등록 실패: '+e.message,'error');}
 }
 
-function removeNotice(id) {
-  notices = notices.filter(n => n.id !== id);
-  renderNotices();
-  renderAdminNotices();
-  showToast('공지사항이 삭제되었습니다');
-  saveNoticesToSheet();
+async function removeNotice(id) {
+  if(!isAdmin)return;
+  try{
+    await db.collection('notices').doc(id).delete();
+    showToast('공지사항이 삭제되었습니다');
+  }catch(e){showToast('공지 삭제 실패: '+e.message,'error');}
 }
 
 // DATA
@@ -1029,40 +868,6 @@ function renderDetail(code){
       ${!hist.length?'<p style="color:#AAA;text-align:center;padding:30px">히스토리가 없습니다</p>':''}
     </div>`;
 
-  const archiveHtml=`
-    <div class="archive-section">
-      <h3 style="display:flex;justify-content:space-between">
-        아카이빙 자료
-        ${isAdmin?`<label style="cursor:pointer;font-size:11px;color:#0066FF;font-weight:500;display:flex;align-items:center;gap:4px">
-          <input type="file" id="fileUploadInput" accept=".jpg,.jpeg,.png,.pdf" style="display:none" onchange="handleFileUpload('${a.code}',this)">
-          + 파일 추가 (JPG/PDF)
-        </label>`:''}
-      </h3>
-      <div id="archiveFilesGrid" class="img-grid">
-        ${(a.images&&a.images.length)?a.images.map((img,i)=>`
-          <div class="img-item" style="position:relative">
-            ${(img.mimeType&&img.mimeType.startsWith('image/'))?
-              `<img src="${img.url}" alt="${img.label}" data-viewurl="${img.viewUrl||img.url}" style="width:100%;height:120px;object-fit:cover;border-radius:6px 6px 0 0" onclick="openImgModal('${img.url}','${img.label}')" onerror="onImgError(this)">`:
-              `<a href="${img.viewUrl||img.url}" target="_blank" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:120px;background:#F0F4FF;border-radius:6px 6px 0 0;text-decoration:none">
-                 <span style="font-size:26px">📄</span>
-                 <span style="font-size:11px;font-weight:600;color:#3B4A6B;text-align:center;padding:0 8px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;line-height:1.4;word-break:break-all">${img.label}</span>
-               </a>`
-            }
-            <div class="img-label" style="display:flex;align-items:center;gap:4px">
-              <a href="${img.viewUrl||img.url}" target="_blank" style="flex:1;color:#0066FF;text-decoration:none;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${img.label}</a>
-              ${isAdmin?`<button onclick="removeFile('${a.code}',${i})" style="background:none;border:none;color:#E53E3E;cursor:pointer;font-size:14px;padding:0">×</button>`:''}
-            </div>
-          </div>`).join(''):
-          `<div style="grid-column:1/-1;color:#AAA;font-size:13px;text-align:center;padding:30px">
-             ${isAdmin?'위 "+ 파일 추가" 버튼으로 JPG 또는 PDF를 업로드하세요':'등록된 아카이빙 자료가 없습니다'}
-           </div>`}
-      </div>
-      <div id="uploadProgress" style="display:none;text-align:center;padding:16px;color:#0066FF;font-size:13px">
-        <span style="display:inline-block;width:16px;height:16px;border:2px solid #ccc;border-top-color:#0066FF;border-radius:50%;animation:spin 0.8s linear infinite;margin-right:8px;vertical-align:middle"></span>
-        업로드 중...
-      </div>
-    </div>`;
-
   document.getElementById('detailContent').innerHTML=`
     <div class="detail-grid">
       <div class="info-card"><h3>커미션율 요약</h3><div class="rate-grid">
@@ -1078,7 +883,6 @@ function renderDetail(code){
       </div>${editBtn}</div>
     </div>
     ${histHtml}
-    ${archiveHtml}
     ${isAdmin?`
     <div style="background:#fff;border:1px solid #E8EAED;border-radius:10px;padding:20px;margin-bottom:24px">
       <h3 style="font-size:14px;font-weight:700;color:#1B2A4A;margin-bottom:14px;display:flex;align-items:center;gap:8px">
@@ -1101,7 +905,7 @@ function renderDetail(code){
           <th style="padding:8px 10px;text-align:left;font-weight:600;color:#555;border-bottom:1px solid #E8EAED">이전값</th>
           <th style="padding:8px 10px;text-align:left;font-weight:600;color:#555;border-bottom:1px solid #E8EAED">변경값</th>
         </tr></thead>
-        <tbody>${entries.map(r=>`<tr><td style="padding:7px 10px;border-bottom:1px solid #F5F5F5">${r[0]||''}</td><td style="padding:7px 10px;border-bottom:1px solid #F5F5F5">${r[1]||''}<br><span style="color:#AAA;font-size:10px">${r[2]||''}</span></td><td style="padding:7px 10px;border-bottom:1px solid #F5F5F5;font-weight:600">${r[4]||''}</td><td style="padding:7px 10px;border-bottom:1px solid #F5F5F5;color:#E53E3E">${r[5]||''}</td><td style="padding:7px 10px;border-bottom:1px solid #F5F5F5;color:#00A86B">${r[6]||''}</td></tr>`).join('')}</tbody>
+        <tbody>${entries.map(r=>{const dt=(r.timestamp&&r.timestamp.toDate)?r.timestamp.toDate().toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}):'';return `<tr><td style="padding:7px 10px;border-bottom:1px solid #F5F5F5">${dt}</td><td style="padding:7px 10px;border-bottom:1px solid #F5F5F5">${r.userName||''}<br><span style="color:#AAA;font-size:10px">${r.userEmail||''}</span></td><td style="padding:7px 10px;border-bottom:1px solid #F5F5F5;font-weight:600">${r.field||''}</td><td style="padding:7px 10px;border-bottom:1px solid #F5F5F5;color:#E53E3E">${r.before||''}</td><td style="padding:7px 10px;border-bottom:1px solid #F5F5F5;color:#00A86B">${r.after||''}</td></tr>`;}).join('')}</tbody>
       </table>`;
     });
   }
@@ -1115,6 +919,13 @@ function showAdminPanel(){
   s.innerHTML='<option value="">항공사 선택...</option>'+airlines.map(a=>`<option value="${a.code}">${a.code}</option>`).join('');
   renderAdminNotices();
   renderAdminMgmt();
+  renderSeedBox();
+}
+function renderSeedBox(){
+  const el=document.getElementById('seedBox');if(!el)return;
+  if(isAdmin&&airlines.length===0){
+    el.innerHTML='<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:#92400E;display:flex;align-items:center;gap:12px"><span>아직 커미션 데이터가 없습니다. 기존 데이터를 한 번에 가져오세요.</span><button class="btn-primary" onclick="seedFromEmbedded()" style="white-space:nowrap">초기 데이터 가져오기</button></div>';
+  }else{el.innerHTML='';}
 }
 
 function loadAdminAirline(code){
@@ -1131,12 +942,7 @@ function loadAdminAirline(code){
       <div class="form-group"><label>유아(INF)</label><input id="ed-inf" value="${a.inf}"></div>
       <div class="form-group form-full"><label>비고 / 주의사항</label><textarea id="ed-notes" rows="3">${a.notes||''}</textarea></div>
     </div><div class="btn-row"><button class="btn-primary" onclick="saveAirline('${code}')">저장</button></div></div>
-    <div class="edit-section"><h3>커미션 히스토리 관리</h3><div id="historyEditList">${hist.map((h,i)=>renderHistRow(h,i)).join('')}</div><div class="btn-add" onclick="addHistRow('${code}')">+ 히스토리 추가</div></div>
-    <div class="edit-section"><h3>아카이빙 이미지 관리</h3><p style="font-size:12px;color:#888;margin-bottom:12px">Google Drive에 업로드한 이미지의 공유 링크를 입력하세요</p>
-      <div id="imgManageGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">${(a.images||[]).map((img,i)=>`<div style="position:relative;border:1px solid #E8EAED;border-radius:8px;overflow:hidden"><img src="${img.url}" style="width:100%;height:100px;object-fit:cover"><button onclick="removeImage('${code}',${i})" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer">×</button><input value="${img.label}" onchange="updateImgLabel('${code}',${i},this.value)" style="width:100%;padding:6px 8px;border:none;border-top:1px solid #E8EAED;font-size:11px"></div>`).join('')}</div>
-      <div style="display:flex;gap:8px;margin-top:12px"><input id="newImgUrl" placeholder="Google Drive 이미지 URL" style="flex:1;padding:9px 12px;border:1.5px solid #D0D5DD;border-radius:7px;font-size:13px"><input id="newImgLabel" placeholder="설명" style="width:160px;padding:9px 12px;border:1.5px solid #D0D5DD;border-radius:7px;font-size:13px"><button class="btn-primary" onclick="addImage('${code}')" style="white-space:nowrap">추가</button></div>
-      <p style="font-size:11px;color:#AAA;margin-top:8px">* Drive 이미지 직접 링크: https://drive.google.com/uc?id=FILE_ID</p>
-    </div>`;
+    <div class="edit-section"><h3>커미션 히스토리 관리</h3><div id="historyEditList">${hist.map((h,i)=>renderHistRow(h,i)).join('')}</div><div class="btn-add" onclick="addHistRow('${code}')">+ 히스토리 추가</div></div>`;
 }
 
 function renderHistRow(h,i){return`<div class="history-edit-row" data-idx="${i}"><input value="${h.route||''}" placeholder="노선" data-field="route"><input value="${h.bsp||''}" placeholder="BSP" data-field="bsp"><input value="${h.overEY||''}" placeholder="오버컴" data-field="overEY"><input value="${h.ticketing||''}" placeholder="발권기간" data-field="ticketing"><input value="${h.departure||''}" placeholder="출발기간" data-field="departure"><input value="${h.accountCode||''}" placeholder="Account Code" data-field="accountCode" style="font-family:monospace"><textarea placeholder="비고" data-field="notes">${h.notes||''}</textarea><button class="btn-remove" onclick="removeHistRow(${i})">×</button></div>`;}
@@ -1148,42 +954,44 @@ async function saveAirline(code){
   if(!isAdmin){showToast('관리자만 저장할 수 있습니다','error');return;}
   const a=airlines.find(x=>x.code===code);if(!a)return;
   const old={bsp:a.bsp,over:a.over,soto:a.soto,reissue:a.reissue,chd:a.chd,inf:a.inf,notes:a.notes};
-  a.bsp=document.getElementById('ed-bsp').value;
-  a.over=document.getElementById('ed-over').value;
-  a.soto=document.getElementById('ed-soto').value;
-  a.reissue=document.getElementById('ed-reissue').value;
-  a.chd=document.getElementById('ed-chd').value;
-  a.inf=document.getElementById('ed-inf').value;
-  a.notes=document.getElementById('ed-notes').value;
+  const next={
+    bsp:document.getElementById('ed-bsp').value,
+    over:document.getElementById('ed-over').value,
+    soto:document.getElementById('ed-soto').value,
+    reissue:document.getElementById('ed-reissue').value,
+    chd:document.getElementById('ed-chd').value,
+    inf:document.getElementById('ed-inf').value,
+    notes:document.getElementById('ed-notes').value
+  };
   const rows=document.querySelectorAll('#historyEditList .history-edit-row'),codeHist=[];
   rows.forEach(row=>{codeHist.push({code,route:row.querySelector('[data-field="route"]').value,bsp:row.querySelector('[data-field="bsp"]').value,overEY:row.querySelector('[data-field="overEY"]').value,overBZ:'',ticketing:row.querySelector('[data-field="ticketing"]').value,departure:row.querySelector('[data-field="departure"]').value,notes:row.querySelector('[data-field="notes"]').value,accountCode:row.querySelector('[data-field="accountCode"]').value||'',b2g:false});});
-  historyData=historyData.filter(h=>h.code!==code).concat(codeHist);
-  renderStats();renderCards();
   showToast(`${code} 저장 중...`,'');
-
   try{
-    await updateAirlineRowDirect(code,[[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,JSON.stringify(a.images||[])]]);
-  }catch(e){showToast(`${code} 저장 실패: ${e.message}`,'error');return;}
-
-  // Sheets에 히스토리 전체 재기록
-  await sheetsUpdate(HIST_SHEET,'A1',[
-    ['code','route','bsp','overEY','overBZ','ticketing','departure','notes','accountCode'],
-    ...historyData.map(h=>[h.code,h.route,h.bsp,h.overEY,h.overBZ||'',h.ticketing,h.departure,h.notes,h.accountCode||''])
-  ]);
-
-  showToast(`${code} 저장 완료`,'success');
-  const fields=['bsp','over','soto','reissue','chd','inf','notes'];
-  for(const f of fields){if(String(old[f])!==String(a[f])){appendAuditLog(code,f,old[f],a[f]);}}
+    await db.collection('airlines').doc(code).set(next,{merge:true});
+    // 해당 항공사 history 전체 교체 (기존 삭제 후 재기록)
+    const oldHist=await db.collection('history').where('code','==',code).get();
+    const batch=db.batch();
+    oldHist.forEach(d=>batch.delete(d.ref));
+    codeHist.forEach(h=>batch.set(db.collection('history').doc(),h));
+    await batch.commit();
+    const fields=['bsp','over','soto','reissue','chd','inf','notes'];
+    for(const f of fields){if(String(old[f])!==String(next[f]))await appendAuditLog(code,f,old[f],next[f]);}
+    showToast(`${code} 저장 완료`,'success');
+  }catch(e){showToast(`${code} 저장 실패: ${e.message}`,'error');}
 }
 
-function addImage(code){const a=airlines.find(x=>x.code===code);if(!a)return;const url=document.getElementById('newImgUrl').value.trim(),label=document.getElementById('newImgLabel').value.trim()||'이미지';if(!url){showToast('URL을 입력하세요','error');return;}let directUrl=url;const dm=url.match(/\/d\/([a-zA-Z0-9_-]+)/);if(dm)directUrl=`https://drive.google.com/uc?id=${dm[1]}`;if(!a.images)a.images=[];a.images.push({url:directUrl,label});loadAdminAirline(code);showToast('이미지가 추가되었습니다','success');}
-function removeImage(code,i){const a=airlines.find(x=>x.code===code);if(a&&a.images){a.images.splice(i,1);loadAdminAirline(code);}}
-function updateImgLabel(code,i,v){const a=airlines.find(x=>x.code===code);if(a&&a.images&&a.images[i])a.images[i].label=v;}
-async function saveImages(code){
-  if(!isAdmin)return;
-  const a=airlines.find(x=>x.code===code);if(!a)return;
-  try{await updateAirlineRowDirect(code,[[a.code,a.bsp,a.over,a.soto,a.reissue,a.chd,a.inf,a.notes,JSON.stringify(a.images||[])]]);}
-  catch(e){console.error('saveImages error:',e);}
+async function addAirlineDoc(){
+  if(!isAdmin){showToast('관리자만 추가할 수 있습니다','error');return;}
+  const code=(document.getElementById('newAirlineCode').value||'').trim().toUpperCase();
+  if(!code){showToast('항공사 코드를 입력하세요','error');return;}
+  if(airlines.some(a=>a.code===code)){showToast('이미 존재하는 코드입니다: '+code,'error');return;}
+  try{
+    await db.collection('airlines').doc(code).set({bsp:'0',over:'0',soto:'0',reissue:'0',chd:'0',inf:'0',notes:''});
+    await appendAuditLog(code,'항공사추가','-',code);
+    document.getElementById('newAirlineCode').value='';
+    showToast(code+' 추가됨 — 아래에서 선택해 값을 입력하세요','success');
+    setTimeout(()=>{const s=document.getElementById('adminAirlineSelect');if(s){s.value=code;loadAdminAirline(code);}},500);
+  }catch(e){showToast('추가 실패: '+e.message,'error');}
 }
 function onImgError(el){
   const label=el.alt, href=el.dataset.viewurl||el.src;
@@ -1193,17 +1001,14 @@ function onImgError(el){
   card.innerHTML=`<span style="font-size:32px">📄</span><span style="font-size:10px;color:#555;text-align:center;padding:0 6px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${label}</span>`;
   el.parentNode.replaceChild(card,el);
 }
-function openSheetDirect(){window.open(SHEET_URL,'_blank');}
 async function refreshData(){
   const btn=document.getElementById('refreshBtn');
   if(btn){btn.classList.add('spinning');btn.disabled=true;}
-  try{
-    await loadSheetsData();
-    renderStats();renderCards();
-    showToast('최신 데이터로 업데이트됐습니다','success');
-  }catch(e){showToast('새로고침 실패','error');}finally{
-    if(btn){btn.classList.remove('spinning');btn.disabled=false;}
-  }
+  renderStats();renderCards();
+  const h=location.hash||'';
+  if(h.startsWith('#detail/'))renderDetail(decodeURIComponent(h.split('/')[1]));
+  showToast('실시간 동기화 중입니다','success');
+  if(btn){setTimeout(()=>{btn.classList.remove('spinning');btn.disabled=false;},400);}
 }
 
 // UTILS
@@ -1222,8 +1027,8 @@ document.querySelectorAll('.view-btn').forEach(b=>b.addEventListener('click',()=
   renderCards();
 }));
 
-// INIT
-loadEmbeddedData();renderStats();renderCards();handleRoute();initGoogleAuth();renderNotices();
+// INIT — 데이터는 로그인 성공 후 Firestore 구독으로 채워진다
+renderStats();renderCards();renderNotices();handleRoute();initAuth();
 </script>
 </body>
 </html>
